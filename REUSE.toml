@@ -1,0 +1,14 @@
+version = 1
+SPDX-PackageName = "ClearStats"
+SPDX-PackageSupplier = "Klaus-E. Klingner <SilverDay Media>"
+SPDX-PackageDownloadLocation = "https://clearstats.online"
+
+[[annotations]]
+path = ["public/**", "src/**", "bin/**", "tests/**", "migrations/**", "*.json", "*.php"]
+SPDX-FileCopyrightText = "Klaus-E. Klingner (SilverDay Media)"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["docs/**", "**/*.md", "**/*.png", "**/*.svg"]
+SPDX-FileCopyrightText = "Klaus-E. Klingner (SilverDay Media)"
+SPDX-License-Identifier = "CC-BY-SA-4.0"

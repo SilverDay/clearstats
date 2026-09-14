@@ -1,0 +1,15 @@
+ClearStats documentation and non-code assets (c) by Klaus-E. Klingner (SilverDay Media)
+
+ClearStats documentation and non-code assets are licensed under a Creative
+Commons Attribution-ShareAlike 4.0 International License.
+
+You should have received a copy of the license along with this work. If not,
+see <https://creativecommons.org/licenses/by-sa/4.0/>.
+
+Full legal code: <https://creativecommons.org/licenses/by-sa/4.0/legalcode>
+
+Note: this file is a pointer/marker per Creative Commons' own recommended
+plaintext-marking practice, not the full ~7,000-word legal code. Run
+`reuse download --all` (REUSE tool v5.0.0, per your standing convention) from
+the repo root to fetch the canonical full-text license files into this
+directory if a complete offline copy is required.

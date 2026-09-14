@@ -1,0 +1,6 @@
+RewriteEngine On
+
+# Route everything not matching a real file/directory through the front controller.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]

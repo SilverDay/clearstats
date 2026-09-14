@@ -1,0 +1,264 @@
+/*
+ * SPDX-FileCopyrightText: Klaus-E. Klingner (SilverDay Media)
+ * SPDX-License-Identifier: MIT
+ */
+
+:root {
+    --cs-bg: #07111b;
+    --cs-surface: #0e1a28;
+    --cs-surface-raised: #142336;
+    --cs-surface-soft: #192b40;
+    --cs-border: #2b4158;
+    --cs-text: #f1f7fc;
+    --cs-text-muted: #b7c8d8;
+    --cs-text-faint: #8fa6bb;
+    --cs-link: #8eeaff;
+    --cs-link-hover: #d2f8ff;
+    --cs-primary: #087ea4;
+    --cs-primary-hover: #0a9ac8;
+    --cs-focus: #8eeaff;
+    --cs-success: #7de2ba;
+    --cs-warning: #ffd18c;
+}
+
+.clearstats-app-page {
+    min-width: 320px;
+    padding-top: 92px !important;
+    color: var(--cs-text) !important;
+    background: var(--cs-bg) !important;
+}
+
+body:not(.clearstats-app-page) .clearstats-theme-control {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 1000;
+}
+
+.clearstats-app-nav {
+    position: fixed !important;
+    inset: 0 0 auto 0;
+    z-index: 900;
+    display: flex !important;
+    align-items: center;
+    gap: 28px;
+    width: 100%;
+    height: 68px;
+    min-height: 68px !important;
+    padding: 0 28px !important;
+    box-sizing: border-box;
+    background: rgba(7, 17, 27, .96) !important;
+    border-bottom: 1px solid var(--cs-border) !important;
+    box-shadow: 0 8px 24px rgba(2, 6, 23, .24);
+    backdrop-filter: blur(16px);
+    font: 14px/1.2 Inter, "Segoe UI", sans-serif !important;
+}
+
+.clearstats-nav-brand,
+.clearstats-nav-links a {
+    color: var(--cs-text) !important;
+    text-decoration: none !important;
+}
+
+.clearstats-nav-brand {
+    flex: 0 0 auto;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: .06em;
+}
+
+.clearstats-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.clearstats-nav-links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: var(--cs-text-muted) !important;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.clearstats-nav-links a:hover,
+.clearstats-nav-links a:focus-visible {
+    color: var(--cs-link-hover) !important;
+    background: var(--cs-surface-soft) !important;
+    border-color: var(--cs-border) !important;
+    text-decoration: none !important;
+}
+
+.clearstats-nav-links a[aria-current="page"] {
+    color: var(--cs-text) !important;
+    background: var(--cs-surface-raised) !important;
+    border-color: var(--cs-border) !important;
+}
+
+.clearstats-app-nav #clearstats-theme-slot {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+.clearstats-app-nav .clearstats-theme-control {
+    position: static;
+    min-height: 36px;
+    padding: 0 8px !important;
+    border: 1px solid var(--cs-border) !important;
+    border-radius: 9px;
+    background: var(--cs-surface-raised) !important;
+    color: var(--cs-text-muted) !important;
+    box-shadow: none !important;
+}
+
+.clearstats-app-nav .clearstats-theme-control select {
+    min-width: 86px;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--cs-text) !important;
+}
+
+.clearstats-app-page a:not(.clearstats-nav-brand):not(.clearstats-nav-links a) {
+    color: var(--cs-link);
+    text-underline-offset: 3px;
+}
+
+.clearstats-app-page a:not(.clearstats-nav-brand):not(.clearstats-nav-links a):hover,
+.clearstats-app-page a:not(.clearstats-nav-brand):not(.clearstats-nav-links a):focus-visible {
+    color: var(--cs-link-hover);
+}
+
+.clearstats-app-page input,
+.clearstats-app-page select,
+.clearstats-app-page textarea {
+    border-color: var(--cs-border) !important;
+    background: var(--cs-surface) !important;
+    color: var(--cs-text) !important;
+}
+
+.clearstats-app-page input::placeholder,
+.clearstats-app-page textarea::placeholder {
+    color: var(--cs-text-faint) !important;
+    opacity: 1;
+}
+
+.clearstats-app-page input:focus,
+.clearstats-app-page select:focus,
+.clearstats-app-page textarea:focus,
+.clearstats-app-page button:focus-visible,
+.clearstats-app-page a:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--cs-focus) 45%, transparent);
+    outline-offset: 2px;
+}
+
+.clearstats-app-page .content,
+.clearstats-app-page .shell {
+    position: relative;
+    z-index: 1;
+}
+
+.clearstats-app-page .content,
+.clearstats-app-page .shell {
+    max-width: 1240px;
+}
+
+.clearstats-app-page .card,
+.clearstats-app-page .login-panel,
+.clearstats-app-page .brand-panel,
+.clearstats-app-page .install-panel {
+    border-color: var(--cs-border) !important;
+    background: var(--cs-surface) !important;
+    box-shadow: 0 18px 42px rgba(2, 6, 23, .22) !important;
+}
+
+.clearstats-app-page .muted,
+.clearstats-app-page label,
+.clearstats-app-page p,
+.clearstats-app-page .site-meta,
+.clearstats-app-page .table th,
+.clearstats-app-page .stat-label {
+    color: var(--cs-text-muted) !important;
+}
+
+.clearstats-app-page .title,
+.clearstats-app-page h1,
+.clearstats-app-page h2,
+.clearstats-app-page .site-name,
+.clearstats-app-page .stat-value,
+.clearstats-app-page .table td {
+    color: var(--cs-text) !important;
+}
+
+.clearstats-app-page button,
+.clearstats-app-page .button.primary {
+    background: var(--cs-primary) !important;
+    border-color: var(--cs-primary) !important;
+    color: #ffffff !important;
+}
+
+.clearstats-app-page button:hover,
+.clearstats-app-page .button.primary:hover {
+    background: var(--cs-primary-hover) !important;
+    border-color: var(--cs-primary-hover) !important;
+}
+
+@media (max-width: 760px) {
+    .clearstats-app-nav {
+        gap: 10px;
+        padding: 0 14px !important;
+    }
+
+    .clearstats-nav-brand {
+        font-size: 13px;
+    }
+
+    .clearstats-nav-links {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .clearstats-nav-links::-webkit-scrollbar {
+        display: none;
+    }
+
+    .clearstats-nav-links a {
+        min-height: 34px;
+        padding: 0 9px;
+        font-size: 12px;
+    }
+
+    .clearstats-app-nav #clearstats-theme-slot {
+        margin-left: 0;
+    }
+
+    .clearstats-app-nav .clearstats-theme-control label {
+        display: none;
+    }
+
+    .clearstats-app-nav .clearstats-theme-control select {
+        min-width: 70px;
+        font-size: 12px;
+    }
+}
+
+[data-theme="light"] {
+    --cs-bg: #f3f7fb;
+    --cs-surface: #ffffff;
+    --cs-surface-raised: #edf3f8;
+    --cs-surface-soft: #e1ebf3;
+    --cs-border: #a9b9c9;
+    --cs-text: #162536;
+    --cs-text-muted: #425466;
+    --cs-text-faint: #607589;
+    --cs-link: #075985;
+    --cs-link-hover: #064e70;
+    --cs-primary: #075985;
+    --cs-primary-hover: #064e70;
+    --cs-focus: #075985;
+}
