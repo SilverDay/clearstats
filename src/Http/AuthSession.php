@@ -9,6 +9,8 @@ namespace ClearStats\Http;
 
 final class AuthSession
 {
+    private const IDLE_TIMEOUT = 1800;
+    private const ABSOLUTE_TIMEOUT = 28800;
     public function __construct()
     {
         if (session_status() === PHP_SESSION_NONE) {
@@ -25,7 +27,16 @@ final class AuthSession
 
     public function isAuthenticated(): bool
     {
-        return isset($_SESSION['auth_user_id']) && is_string($_SESSION['auth_user_id']) && $_SESSION['auth_user_id'] !== '';
+        if (!isset($_SESSION['auth_user_id'], $_SESSION['auth_issued_at'], $_SESSION['auth_last_seen'])) {
+            return false;
+        }
+        $now = time();
+        if ($now - (int) $_SESSION['auth_last_seen'] > self::IDLE_TIMEOUT || $now - (int) $_SESSION['auth_issued_at'] > self::ABSOLUTE_TIMEOUT) {
+            $this->logout();
+            return false;
+        }
+        $_SESSION['auth_last_seen'] = $now;
+        return is_string($_SESSION['auth_user_id']) && $_SESSION['auth_user_id'] !== '';
     }
 
     public function userId(): ?string
@@ -52,11 +63,17 @@ final class AuthSession
         session_regenerate_id(true);
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         $_SESSION['auth_user_id'] = $userId;
+        $_SESSION['auth_issued_at'] = time();
+        $_SESSION['auth_last_seen'] = time();
     }
 
     public function logout(): void
     {
         $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'] ?? '', (bool) $params['secure'], (bool) $params['httponly']);
+        }
         session_destroy();
     }
 

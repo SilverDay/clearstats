@@ -9,6 +9,7 @@ namespace ClearStats\Tests\Ingestion;
 
 use ClearStats\Ingestion\CountryResolver;
 use ClearStats\Ingestion\UserAgentClassifier;
+use ClearStats\Ingestion\LanguageResolver;
 use PHPUnit\Framework\TestCase;
 
 final class MetadataResolverTest extends TestCase
@@ -26,7 +27,15 @@ final class MetadataResolverTest extends TestCase
     {
         $classifier = new UserAgentClassifier();
 
-        $this->assertSame(['device_type' => 'mobile', 'browser' => 'chrome'], $classifier->classify('Mozilla/5.0 Android Mobile Chrome/120'));
-        $this->assertSame(['device_type' => 'desktop', 'browser' => 'safari'], $classifier->classify('Mozilla/5.0 Macintosh Safari/17.0'));
+        $this->assertSame(['device_type' => 'mobile', 'browser' => 'chrome', 'operating_system' => 'android'], $classifier->classify('Mozilla/5.0 Android Mobile Chrome/120'));
+        $this->assertSame(['device_type' => 'desktop', 'browser' => 'safari', 'operating_system' => 'macos'], $classifier->classify('Mozilla/5.0 Macintosh Safari/17.0'));
+    }
+
+    public function testNormalizesPreferredLanguage(): void
+    {
+        $resolver = new LanguageResolver();
+
+        $this->assertSame('de-de', $resolver->resolve(['HTTP_ACCEPT_LANGUAGE' => 'de-DE,de;q=0.9,en;q=0.8']));
+        $this->assertSame('', $resolver->resolve(['HTTP_ACCEPT_LANGUAGE' => 'not-valid']));
     }
 }

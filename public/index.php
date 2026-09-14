@@ -26,6 +26,15 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+$httpsEnabled = (bool) ($config['app']['https'] ?? false);
+if (($config['app']['https'] ?? null) === null) {
+    $httpsEnabled = ($_SERVER['HTTPS'] ?? '') !== '' && strtolower((string) $_SERVER['HTTPS']) !== 'off';
+}
+if ($httpsEnabled) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
+header('Cross-Origin-Opener-Policy: same-origin-allow-popups');
+header('Cross-Origin-Resource-Policy: cross-origin');
 
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
@@ -38,10 +47,15 @@ if ($path === '') {
 $router = new ClearStats\Http\Router();
 $route = $router->route($method, $path);
 
-$session = new ClearStats\Http\AuthSession();
-$isAuthenticated = $session->isAuthenticated();
+$session = null;
+$protectedRoute = $route !== null && in_array($route['controller'], ['DashboardController', 'SiteController', 'UserController'], true);
+$isAuthenticated = false;
 $isAdmin = false;
-if ($isAuthenticated) {
+if ($protectedRoute) {
+    $session = new ClearStats\Http\AuthSession();
+    $isAuthenticated = $session->isAuthenticated();
+}
+if ($isAuthenticated && $session !== null) {
     $userDatabase = new ClearStats\Db\Database($config['db']);
     $roleStatement = $userDatabase->pdo()->prepare('SELECT role FROM users WHERE id = :user_id LIMIT 1');
     $roleStatement->execute(['user_id' => $session->userId()]);
@@ -49,9 +63,8 @@ if ($isAuthenticated) {
 }
 
 if (
-    $route !== null
-    && in_array($route['controller'], ['DashboardController', 'SiteController', 'UserController'], true)
-    && !$session->isAuthenticated()
+    $protectedRoute
+    && !$isAuthenticated
 ) {
     header('Location: /login');
     exit;
@@ -66,6 +79,7 @@ if ($route === null) {
 
 $controllerMap = [
     'HomeController' => ClearStats\Http\HomeController::class,
+    'InfoController' => ClearStats\Http\InfoController::class,
     'AuthController' => ClearStats\Http\AuthController::class,
     'DashboardController' => ClearStats\Http\DashboardController::class,
     'SiteController' => ClearStats\Http\SiteController::class,
@@ -126,7 +140,13 @@ $controller = match ($controllerClass) {
     ClearStats\Ingestion\EventController::class => new $controllerClass(
         new ClearStats\Domain\SiteValidation(),
         new ClearStats\Domain\SiteAccessPolicy(),
-        null,
+        new ClearStats\Ingestion\VisitorHasher(
+            new ClearStats\Ingestion\SaltProvider(
+                null,
+                (new ClearStats\Db\Database($config['db']))->pdo(),
+                (int) ($config['salt']['rotation_hours'] ?? 24),
+            ),
+        ),
         null,
         new ClearStats\Ingestion\DatabaseSiteResolver(
             (new ClearStats\Db\Database($config['db']))->pdo(),
@@ -143,6 +163,7 @@ $controller = match ($controllerClass) {
             $config['geoip']['country_database_path'] ?? null,
         ),
         new ClearStats\Ingestion\UserAgentClassifier(),
+        new ClearStats\Ingestion\LanguageResolver(),
     ),
     default => new $controllerClass(),
 };
@@ -167,7 +188,7 @@ if ($isHtmlRoute) {
     if ($isAuthenticated) {
         $navigation = '<nav class="clearstats-app-nav" aria-label="Primary navigation"><a class="clearstats-nav-brand" href="/dashboard">ClearStats</a><div class="clearstats-nav-links"><a href="/dashboard">Dashboard</a><a href="/sites">Sites</a>'
             . ($isAdmin ? '<a href="/users">Users</a>' : '')
-            . '<a href="/password">Password</a><a href="/logout">Log out</a></div><div id="clearstats-theme-slot"></div></nav>';
+            . '<a href="/password">Password</a><form method="post" action="/logout" class="clearstats-logout-form"><input type="hidden" name="_csrf" value="' . htmlspecialchars($session->csrfToken(), ENT_QUOTES, 'UTF-8') . '"><button type="submit">Log out</button></form></div><div id="clearstats-theme-slot"></div></nav>';
     }
     $navigationStyle = '<style>.clearstats-app-nav{position:sticky;top:0;z-index:900;display:flex;align-items:center;gap:24px;min-height:58px;padding:10px 24px;background:rgba(9,15,25,.96);border-bottom:1px solid rgba(148,163,184,.18);font:14px/1.2 Inter,"Segoe UI",sans-serif}.clearstats-nav-brand{color:#f8fafc;font-weight:800;letter-spacing:.04em;text-decoration:none}.clearstats-nav-links{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.clearstats-nav-links a{color:#dbeafe;text-decoration:none}.clearstats-nav-links a:hover,.clearstats-nav-links a:focus{color:#7ae7ff;text-decoration:underline;text-underline-offset:3px}.clearstats-nav-links a:focus,.clearstats-nav-brand:focus{outline:2px solid #7ae7ff;outline-offset:3px}.clearstats-app-nav #clearstats-theme-slot{margin-left:auto}.clearstats-app-nav .clearstats-theme-control{position:static;box-shadow:none;padding:0;border:0;background:transparent}.clearstats-app-nav .clearstats-theme-control select{min-width:82px}@media(max-width:700px){.clearstats-app-nav{align-items:flex-start;flex-wrap:wrap;padding:12px 16px}.clearstats-nav-links{gap:12px}.clearstats-app-nav #clearstats-theme-slot{margin-left:0}}[data-theme="light"] .clearstats-app-nav{background:#ffffff;border-color:#c5d0dc}[data-theme="light"] .clearstats-nav-brand,[data-theme="light"] .clearstats-nav-links a{color:#183047}[data-theme="light"] .clearstats-nav-links a:hover,[data-theme="light"] .clearstats-nav-links a:focus{color:#075985}</style>';
     $bodyClass = $isAuthenticated ? ' class="clearstats-app-page"' : '';

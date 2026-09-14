@@ -4,6 +4,7 @@
 
 - Set the web server document root to `public/`; do not expose `config/`, `src/`, `tests/`, `migrations/`, or `logs/`.
 - Require HTTPS in production. The application marks session cookies `Secure` when HTTPS is detected.
+- Set `app.https` to `true` in production so HSTS is emitted consistently, including behind a reverse proxy.
 - Confirm Apache rewrite support and `public/.htaccess` routing in a staging environment.
 - Confirm access and error logs do not record request bodies, raw User-Agent values, or raw client IP values for the ingestion endpoint.
 - Keep `config/config.php` outside version control and rotate any credential that has appeared in shell history, logs, or shared configuration.
@@ -45,3 +46,5 @@ Run PHPUnit from the project root. Database-backed tests use an in-memory SQLite
 - Review each site's `raw_event_retention_days` setting during onboarding and operational reviews.
 - Include the privacy model, proxy trust, Redis behavior, and retention policy in the DPIA and change records.
 - Session, bounce, engagement, campaign, conversion, scroll, and click data are aggregate analytics only; review event names and campaign values to ensure sites do not send personal data.
+- Browser, operating-system, and language values are coarse classifications only. Raw User-Agent and full `Accept-Language` headers are never persisted.
+- The visitor salt is stored in `salt_state` and rotates automatically when its configured age is exceeded. Restrict database access to the application account and never expose the salt table through backups or diagnostics.

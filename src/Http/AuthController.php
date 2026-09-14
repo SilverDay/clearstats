@@ -35,8 +35,9 @@ final class AuthController
 
             $email = trim((string) ($_POST['email'] ?? ''));
             $password = (string) ($_POST['password'] ?? '');
+            $ipAddress = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
 
-            if ($this->failureMonitor !== null && !$this->failureMonitor->allow($email)) {
+            if ($this->failureMonitor !== null && !$this->failureMonitor->allow($email, $ipAddress)) {
                 http_response_code(429);
                 return;
             }
@@ -49,7 +50,7 @@ final class AuthController
             }
 
             http_response_code(401);
-            $this->failureMonitor?->recordFailure($email);
+            $this->failureMonitor?->recordFailure($email, $ipAddress);
         }
 
         $csrfToken = htmlspecialchars($this->session->csrfToken(), ENT_QUOTES, 'UTF-8');
@@ -177,6 +178,10 @@ HTML);
 
     public function logout(): void
     {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST' || !$this->session->validCsrfToken((string) ($_POST['_csrf'] ?? ''))) {
+            http_response_code(403);
+            return;
+        }
         $this->session->logout();
         header('Location: /login');
         exit;
@@ -224,6 +229,7 @@ HTML);
                     (string) ($_POST['current_password'] ?? ''),
                     (string) ($_POST['new_password'] ?? ''),
                 );
+                $this->session->login($userId);
                 header('Location: /dashboard');
                 exit;
             } catch (\Throwable $exception) {

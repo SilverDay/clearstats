@@ -8,6 +8,16 @@ declare(strict_types=1);
 
 require __DIR__ . '/../vendor/autoload.php';
 
+$lock = fopen('/tmp/clearstats-queue-worker.lock', 'c');
+if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+    fwrite(STDOUT, "queue-worker.php: another worker is already running\n");
+    exit(0);
+}
+register_shutdown_function(static function () use ($lock): void {
+    flock($lock, LOCK_UN);
+    fclose($lock);
+});
+
 $config = require __DIR__ . '/../config/config.php';
 $limit = 100;
 foreach ($argv as $argument) {

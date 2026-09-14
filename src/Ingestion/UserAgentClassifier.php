@@ -9,9 +9,7 @@ namespace ClearStats\Ingestion;
 
 final class UserAgentClassifier
 {
-    /**
-     * @return array{device_type: string, browser: string}
-     */
+    /** @return array{device_type: string, browser: string, operating_system: string} */
     public function classify(string $userAgent): array
     {
         $lower = strtolower($userAgent);
@@ -26,7 +24,15 @@ final class UserAgentClassifier
             str_contains($lower, 'trident/') || str_contains($lower, 'msie ') => 'ie',
             default => 'other',
         };
+        $operatingSystem = match (true) {
+            str_contains($lower, 'windows') => 'windows',
+            str_contains($lower, 'android') => 'android',
+            str_contains($lower, 'iphone') || str_contains($lower, 'ipad') || str_contains($lower, 'ios') => 'ios',
+            str_contains($lower, 'mac os') || str_contains($lower, 'macintosh') => 'macos',
+            str_contains($lower, 'linux') => 'linux',
+            default => 'other',
+        };
 
-        return ['device_type' => $device, 'browser' => $browser];
+        return ['device_type' => $device, 'browser' => $browser, 'operating_system' => $operatingSystem];
     }
 }

@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL DEFAULT 'admin',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS salt_state (
+    id INTEGER PRIMARY KEY,
+    current_salt TEXT NOT NULL,
+    previous_salt TEXT,
+    generated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS user_site_access (
     user_id INTEGER NOT NULL,
     site_id TEXT NOT NULL,
@@ -40,6 +46,8 @@ CREATE TABLE IF NOT EXISTS events_raw (
     country_code TEXT,
     device_type TEXT NOT NULL DEFAULT 'other',
     browser TEXT,
+    operating_system TEXT,
+    language_code TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS daily_site_stats (
@@ -102,4 +110,18 @@ CREATE TABLE IF NOT EXISTS daily_campaign_stats (
         campaign_medium,
         campaign_name
     )
+);
+CREATE TABLE IF NOT EXISTS daily_os_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    operating_system TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, operating_system)
+);
+CREATE TABLE IF NOT EXISTS daily_language_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    language_code TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, language_code)
 );

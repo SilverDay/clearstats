@@ -93,6 +93,18 @@ final class DashboardQuery
         return $this->portfolioDimensionRows('daily_device_stats', 'device_type', 'visits', 'device_type', 'visits', $siteIds, $date, 100);
     }
 
+    /** @param list<string> $siteIds */
+    public function portfolioOperatingSystems(array $siteIds, string $date): array
+    {
+        return $this->portfolioDimensionRows('daily_os_stats', 'operating_system', 'visits', 'operating_system', 'visits', $siteIds, $date, 20);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioLanguages(array $siteIds, string $date): array
+    {
+        return $this->portfolioDimensionRows('daily_language_stats', 'language_code', 'visits', 'language_code', 'visits', $siteIds, $date, 20);
+    }
+
     private function portfolioDimensionRows(string $table, string $column, string $countColumn, string $outputColumn, string $outputCount, array $siteIds, string $date, int $limit): array
     {
         $params = ['date' => $date];
@@ -195,6 +207,16 @@ final class DashboardQuery
         return $this->dimensionRows('daily_device_stats', 'device_type', 'device_type', $siteId, $date, 100);
     }
 
+    public function operatingSystems(string $siteId, string $date): array
+    {
+        return $this->dimensionRows('daily_os_stats', 'operating_system', 'operating_system', $siteId, $date, 20);
+    }
+
+    public function languages(string $siteId, string $date): array
+    {
+        return $this->dimensionRows('daily_language_stats', 'language_code', 'language_code', $siteId, $date, 20);
+    }
+
     public function topEvents(string $siteId, string $date, int $limit = 10): array
     {
         $statement = $this->database->pdo()->prepare('SELECT event_name, events FROM daily_event_stats WHERE site_id = :site_id AND date = :date ORDER BY events DESC, event_name ASC LIMIT :limit');
@@ -221,6 +243,8 @@ final class DashboardQuery
             'daily_referrer_stats' => 'referrer_domain',
             'daily_country_stats' => 'country_code',
             'daily_device_stats' => 'device_type',
+            'daily_os_stats' => 'operating_system',
+            'daily_language_stats' => 'language_code',
         ];
         if (($allowed[$table] ?? null) !== $column) {
             return [];

@@ -26,12 +26,12 @@ final class QueueWorker
 
         $insertSql = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
             ? 'INSERT INTO events_raw
-             (event_id, site_id, session_id, session_started_at, visitor_hash, event_type, event_name, engagement_seconds, url_path, campaign_source, campaign_medium, campaign_name, referrer_domain, country_code, device_type, browser, created_at)
-             VALUES (:event_id, :site_id, :session_id, :session_started_at, :visitor_hash, :event_type, :event_name, :engagement_seconds, :url_path, :campaign_source, :campaign_medium, :campaign_name, :referrer_domain, :country_code, :device_type, :browser, :created_at)
+             (event_id, site_id, session_id, session_started_at, visitor_hash, event_type, event_name, engagement_seconds, url_path, campaign_source, campaign_medium, campaign_name, referrer_domain, country_code, device_type, browser, operating_system, language_code, created_at)
+             VALUES (:event_id, :site_id, :session_id, :session_started_at, :visitor_hash, :event_type, :event_name, :engagement_seconds, :url_path, :campaign_source, :campaign_medium, :campaign_name, :referrer_domain, :country_code, :device_type, :browser, :operating_system, :language_code, :created_at)
              ON CONFLICT(event_id) DO UPDATE SET event_id = excluded.event_id'
             : 'INSERT INTO events_raw
-             (event_id, site_id, session_id, session_started_at, visitor_hash, event_type, event_name, engagement_seconds, url_path, campaign_source, campaign_medium, campaign_name, referrer_domain, country_code, device_type, browser, created_at)
-             VALUES (:event_id, :site_id, :session_id, :session_started_at, :visitor_hash, :event_type, :event_name, :engagement_seconds, :url_path, :campaign_source, :campaign_medium, :campaign_name, :referrer_domain, :country_code, :device_type, :browser, :created_at)
+             (event_id, site_id, session_id, session_started_at, visitor_hash, event_type, event_name, engagement_seconds, url_path, campaign_source, campaign_medium, campaign_name, referrer_domain, country_code, device_type, browser, operating_system, language_code, created_at)
+             VALUES (:event_id, :site_id, :session_id, :session_started_at, :visitor_hash, :event_type, :event_name, :engagement_seconds, :url_path, :campaign_source, :campaign_medium, :campaign_name, :referrer_domain, :country_code, :device_type, :browser, :operating_system, :language_code, :created_at)
              ON DUPLICATE KEY UPDATE event_id = VALUES(event_id)';
         $insert = $this->pdo->prepare($insertSql);
 
@@ -65,6 +65,8 @@ final class QueueWorker
                 'country_code' => $this->nullableString($event['country_code'] ?? null),
                 'device_type' => (string) ($event['device_type'] ?? 'other'),
                 'browser' => $this->nullableString($event['browser'] ?? null),
+                'operating_system' => $this->nullableString($event['operating_system'] ?? null),
+                'language_code' => $this->nullableString($event['language_code'] ?? null),
                 'created_at' => $this->createdAt($event['created_at'] ?? null),
             ]);
             $this->queue->acknowledge($payload);

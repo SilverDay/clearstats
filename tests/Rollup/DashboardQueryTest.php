@@ -77,4 +77,19 @@ final class DashboardQueryTest extends TestCase
 
         $pdo->exec("DELETE FROM daily_site_stats WHERE site_id IN ('portfolio-a', 'portfolio-b') AND date = '2026-09-14'");
     }
+
+    public function testLoadsPortfolioOperatingSystemsAndLanguages(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("INSERT INTO daily_os_stats (site_id, date, operating_system, visits) VALUES ('site-a', '2026-09-14', 'linux', 4), ('site-b', '2026-09-14', 'linux', 3)");
+        $pdo->exec("INSERT INTO daily_language_stats (site_id, date, language_code, visits) VALUES ('site-a', '2026-09-14', 'de-de', 2), ('site-b', '2026-09-14', 'de-de', 1)");
+
+        $query = new DashboardQuery($database);
+
+        $this->assertSame('linux', $query->portfolioOperatingSystems(['site-a', 'site-b'], '2026-09-14')[0]['operating_system']);
+        $this->assertSame(7, $query->portfolioOperatingSystems(['site-a', 'site-b'], '2026-09-14')[0]['visits']);
+        $this->assertSame('de-de', $query->portfolioLanguages(['site-a', 'site-b'], '2026-09-14')[0]['language_code']);
+        $this->assertSame(3, $query->portfolioLanguages(['site-a', 'site-b'], '2026-09-14')[0]['visits']);
+    }
 }

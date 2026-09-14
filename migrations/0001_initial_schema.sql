@@ -23,6 +23,12 @@ CREATE TABLE IF NOT EXISTS users (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_users_email (email)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+CREATE TABLE IF NOT EXISTS salt_state (
+    id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+    current_salt CHAR(64) NOT NULL,
+    previous_salt CHAR(64) NULL,
+    generated_at DATETIME NOT NULL
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 CREATE TABLE IF NOT EXISTS user_site_access (
     user_id BIGINT UNSIGNED NOT NULL,
     site_id VARCHAR(32) NOT NULL,
@@ -51,6 +57,8 @@ CREATE TABLE IF NOT EXISTS events_raw (
     country_code CHAR(2) NULL,
     device_type ENUM('desktop', 'mobile', 'tablet', 'other') NOT NULL DEFAULT 'other',
     browser VARCHAR(32) NULL,
+    operating_system VARCHAR(32) NULL,
+    language_code CHAR(5) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_events_raw_site_date (site_id, created_at),
     UNIQUE KEY uq_events_raw_event_id (event_id)
@@ -63,6 +71,8 @@ ADD COLUMN IF NOT EXISTS event_id CHAR(64) NULL,
     ADD COLUMN IF NOT EXISTS campaign_source VARCHAR(128) NULL,
     ADD COLUMN IF NOT EXISTS campaign_medium VARCHAR(128) NULL,
     ADD COLUMN IF NOT EXISTS campaign_name VARCHAR(128) NULL,
+    ADD COLUMN IF NOT EXISTS operating_system VARCHAR(32) NULL,
+    ADD COLUMN IF NOT EXISTS language_code CHAR(5) NULL,
     MODIFY COLUMN event_type ENUM('pageview', 'custom', 'session_end') NOT NULL,
     ADD UNIQUE KEY IF NOT EXISTS uq_events_raw_event_id (event_id);
 -- Rollup tables — dashboard reads only ever hit these, never events_raw. See spec §6.2.
@@ -108,6 +118,20 @@ CREATE TABLE IF NOT EXISTS daily_device_stats (
     device_type ENUM('desktop', 'mobile', 'tablet', 'other') NOT NULL,
     visits INT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (site_id, date, device_type)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+CREATE TABLE IF NOT EXISTS daily_os_stats (
+    site_id VARCHAR(32) NOT NULL,
+    date DATE NOT NULL,
+    operating_system VARCHAR(32) NOT NULL,
+    visits INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, operating_system)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+CREATE TABLE IF NOT EXISTS daily_language_stats (
+    site_id VARCHAR(32) NOT NULL,
+    date DATE NOT NULL,
+    language_code CHAR(5) NOT NULL,
+    visits INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, language_code)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 CREATE TABLE IF NOT EXISTS daily_event_stats (
     site_id VARCHAR(32) NOT NULL,

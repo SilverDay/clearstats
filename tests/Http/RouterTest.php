@@ -17,12 +17,18 @@ final class RouterTest extends TestCase
         $router = new Router();
 
         $this->assertSame(['controller' => 'HomeController', 'action' => 'index'], $router->route('GET', '/'));
+        $this->assertSame(['controller' => 'InfoController', 'action' => 'about'], $router->route('GET', '/about'));
+        $this->assertSame(['controller' => 'InfoController', 'action' => 'faq'], $router->route('GET', '/faq'));
+        $this->assertSame(['controller' => 'InfoController', 'action' => 'imprint'], $router->route('GET', '/imprint'));
+        $this->assertSame(['controller' => 'InfoController', 'action' => 'privacy'], $router->route('GET', '/privacy'));
+        $this->assertSame(['controller' => 'InfoController', 'action' => 'terms'], $router->route('GET', '/terms'));
         $this->assertSame(['controller' => 'AuthController', 'action' => 'login'], $router->route('GET', '/login'));
         $this->assertSame(['controller' => 'AuthController', 'action' => 'login'], $router->route('POST', '/login'));
         $this->assertSame(['controller' => 'AuthController', 'action' => 'forgotPassword'], $router->route('GET', '/forgot-password'));
         $this->assertSame(['controller' => 'AuthController', 'action' => 'forgotPassword'], $router->route('POST', '/forgot-password'));
         $this->assertSame(['controller' => 'EventController', 'action' => 'handle'], $router->route('OPTIONS', '/api/event'));
-        $this->assertSame(['controller' => 'AuthController', 'action' => 'logout'], $router->route('GET', '/logout'));
+        $this->assertSame(['controller' => 'AuthController', 'action' => 'logout'], $router->route('POST', '/logout'));
+        $this->assertNull($router->route('GET', '/logout'));
         $this->assertSame(['controller' => 'DashboardController', 'action' => 'index'], $router->route('GET', '/dashboard'));
         $this->assertSame(['controller' => 'DashboardController', 'action' => 'index'], $router->route('GET', '/dashboard/'));
         $this->assertSame(['controller' => 'SiteController', 'action' => 'index'], $router->route('GET', '/sites'));

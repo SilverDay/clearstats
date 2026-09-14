@@ -21,11 +21,16 @@ final class Router
 
         $routes = [
             'GET /' => ['controller' => 'HomeController', 'action' => 'index'],
+            'GET /about' => ['controller' => 'InfoController', 'action' => 'about'],
+            'GET /faq' => ['controller' => 'InfoController', 'action' => 'faq'],
+            'GET /imprint' => ['controller' => 'InfoController', 'action' => 'imprint'],
+            'GET /privacy' => ['controller' => 'InfoController', 'action' => 'privacy'],
+            'GET /terms' => ['controller' => 'InfoController', 'action' => 'terms'],
             'GET /login' => ['controller' => 'AuthController', 'action' => 'login'],
             'POST /login' => ['controller' => 'AuthController', 'action' => 'login'],
             'GET /forgot-password' => ['controller' => 'AuthController', 'action' => 'forgotPassword'],
             'POST /forgot-password' => ['controller' => 'AuthController', 'action' => 'forgotPassword'],
-            'GET /logout' => ['controller' => 'AuthController', 'action' => 'logout'],
+            'POST /logout' => ['controller' => 'AuthController', 'action' => 'logout'],
             'GET /password' => ['controller' => 'AuthController', 'action' => 'passwordChange'],
             'POST /password' => ['controller' => 'AuthController', 'action' => 'passwordChange'],
             'GET /dashboard' => ['controller' => 'DashboardController', 'action' => 'index'],

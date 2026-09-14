@@ -34,6 +34,8 @@ final class DashboardController
         $referrerRows = '<tr><td colspan="2">No rollup data for today.</td></tr>';
         $countryRows = '<tr><td colspan="2">No rollup data for today.</td></tr>';
         $deviceRows = '<tr><td colspan="2">No rollup data for today.</td></tr>';
+        $osRows = '<tr><td colspan="2">No OS data for today.</td></tr>';
+        $languageRows = '<tr><td colspan="2">No language data for today.</td></tr>';
         $eventRows = '<tr><td colspan="2">No conversion events for today.</td></tr>';
         $campaignRows = '<tr><td colspan="2">No campaign data for today.</td></tr>';
         $siteOptions = '<option value="">No assigned sites</option>';
@@ -83,6 +85,8 @@ final class DashboardController
                 $referrerRows = $this->formatRows($this->query->portfolioTopReferrers($siteIds, gmdate('Y-m-d'), 5), 'referrer_domain');
                 $countryRows = $this->formatRows($this->query->portfolioTopCountries($siteIds, gmdate('Y-m-d'), 5), 'country_code');
                 $deviceRows = $this->formatRows($this->query->portfolioDevices($siteIds, gmdate('Y-m-d')), 'device_type');
+                $osRows = $this->formatRows($this->query->portfolioOperatingSystems($siteIds, gmdate('Y-m-d')), 'operating_system');
+                $languageRows = $this->formatRows($this->query->portfolioLanguages($siteIds, gmdate('Y-m-d')), 'language_code');
             } elseif ($selectedSite !== null) {
                 $selectedSiteLabel = (string) $selectedSite['name'];
                 $overview = $this->query->overview($selectedSiteId, gmdate('Y-m-d'));
@@ -114,6 +118,8 @@ final class DashboardController
                 $referrerRows = $this->formatRows($this->query->topReferrers($selectedSiteId, gmdate('Y-m-d'), 5), 'referrer_domain');
                 $countryRows = $this->formatRows($this->query->topCountries($selectedSiteId, gmdate('Y-m-d'), 5), 'country_code');
                 $deviceRows = $this->formatRows($this->query->devices($selectedSiteId, gmdate('Y-m-d')), 'device_type');
+                $osRows = $this->formatRows($this->query->operatingSystems($selectedSiteId, gmdate('Y-m-d')), 'operating_system');
+                $languageRows = $this->formatRows($this->query->languages($selectedSiteId, gmdate('Y-m-d')), 'language_code');
                 $eventRows = $this->formatRows($this->query->topEvents($selectedSiteId, gmdate('Y-m-d'), 5), 'event_name', 'events');
                 $campaignRows = '';
                 foreach ($this->query->campaigns($selectedSiteId, gmdate('Y-m-d'), 5) as $campaign) {
@@ -258,6 +264,7 @@ final class DashboardController
                 <div class="card"><div class="stat-label">Countries</div><table class="table"><tbody>{{COUNTRIES}}</tbody></table></div>
             </section>
             <section class="card" style="margin-top:18px;"><div class="stat-label">Devices</div><table class="table"><tbody>{{DEVICES}}</tbody></table></section>
+            <section class="panel-grid" style="margin-top:18px;"><div class="card"><div class="stat-label">Operating systems</div><table class="table"><tbody>{{OS}}</tbody></table></div><div class="card"><div class="stat-label">Languages</div><table class="table"><tbody>{{LANGUAGES}}</tbody></table></div></section>
             <section class="panel-grid" style="margin-top:18px;"><div class="card"><div class="stat-label">Conversions and custom events</div><table class="table"><tbody>{{EVENTS}}</tbody></table></div><div class="card"><div class="stat-label">Campaigns</div><table class="table"><tbody>{{CAMPAIGNS}}</tbody></table></div></section>
         </main>
     </div>
@@ -266,8 +273,8 @@ final class DashboardController
 HTML;
 
         echo str_replace(
-            ['{{PAGEVIEWS}}', '{{VISITORS}}', '{{SESSIONS}}', '{{BOUNCE_RATE}}', '{{ENGAGEMENT}}', '{{TOP_PAGES}}', '{{REFERRERS}}', '{{COUNTRIES}}', '{{DEVICES}}', '{{EVENTS}}', '{{CAMPAIGNS}}', '{{TREND}}', '{{CHART_BARS}}', '{{SITE_OPTIONS}}', '{{SELECTED_SITE}}'],
-            [$pageviews, $visitors, $sessions, $bounceRate, $engagement, $topPageRows, $referrerRows, $countryRows, $deviceRows, $eventRows, $campaignRows, $trend, $chartBars, $siteOptions, htmlspecialchars($selectedSiteLabel, ENT_QUOTES, 'UTF-8')],
+            ['{{PAGEVIEWS}}', '{{VISITORS}}', '{{SESSIONS}}', '{{BOUNCE_RATE}}', '{{ENGAGEMENT}}', '{{TOP_PAGES}}', '{{REFERRERS}}', '{{COUNTRIES}}', '{{DEVICES}}', '{{OS}}', '{{LANGUAGES}}', '{{EVENTS}}', '{{CAMPAIGNS}}', '{{TREND}}', '{{CHART_BARS}}', '{{SITE_OPTIONS}}', '{{SELECTED_SITE}}'],
+            [$pageviews, $visitors, $sessions, $bounceRate, $engagement, $topPageRows, $referrerRows, $countryRows, $deviceRows, $osRows, $languageRows, $eventRows, $campaignRows, $trend, $chartBars, $siteOptions, htmlspecialchars($selectedSiteLabel, ENT_QUOTES, 'UTF-8')],
             $html,
         );
     }

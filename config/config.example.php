@@ -10,6 +10,9 @@ declare(strict_types=1);
  * Never commit real credentials.
  */
 return [
+    'app' => [
+        'https' => true,
+    ],
     'db' => [
         'dsn'      => 'mysql:host=127.0.0.1;dbname=clearstats;charset=utf8mb4',
         'user'     => 'clearstats',

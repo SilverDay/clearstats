@@ -73,9 +73,31 @@ final class HomeController
         }
         .nav-links {
             display: flex;
-            gap: 18px;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+        .nav-links a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 38px;
+            padding: 0 12px;
+            border: 1px solid transparent;
+            border-radius: 9px;
             color: var(--muted);
-            font-size: 0.96rem;
+            font-weight: 650;
+            text-decoration: none;
+            transition: color .18s ease, background .18s ease, border-color .18s ease;
+        }
+        .nav-links a:hover,
+        .nav-links a:focus-visible {
+            color: var(--text);
+            background: rgba(104,225,253,0.10);
+            border-color: rgba(104,225,253,0.28);
+            outline: none;
+        }
+        .nav-links a:focus-visible {
+            box-shadow: 0 0 0 3px rgba(104,225,253,0.18);
         }
         .button {
             display: inline-flex;
@@ -199,6 +221,9 @@ final class HomeController
         }
         .mini-table th { color: var(--muted); font-weight: 600; }
         .mini-table td { color: var(--text); }
+        .footer-links { display:flex; gap:18px; flex-wrap:wrap; margin-top:28px; color:var(--muted); font-size:.88rem; }
+        .footer-links a { color:var(--muted); text-decoration:none; }
+        .footer-links a:hover { color:var(--text); text-decoration:underline; text-underline-offset:3px; }
         @media (max-width: 860px) {
             .content { grid-template-columns: 1fr; }
             .nav { flex-wrap: wrap; gap: 12px; }
@@ -215,10 +240,8 @@ final class HomeController
                     <span>ClearStats</span>
                 </div>
                 <div class="nav-links">
-                    <span>Platform</span>
-                    <span>Privacy</span>
-                    <span>Pricing</span>
-                    <span>Docs</span>
+                    <a href="/about">About</a>
+                    <a href="/faq">FAQ</a>
                 </div>
                 <a class="button secondary" href="/login">Log in</a>
             </nav>
@@ -279,6 +302,7 @@ final class HomeController
                     </table>
                 </aside>
             </div>
+            <div class="footer-links"><a href="/about">About</a><a href="/faq">FAQ</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/imprint">Legal notice</a></div>
         </div>
     </div>
 </body>

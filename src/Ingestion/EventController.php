@@ -38,6 +38,7 @@ final class EventController
         ?BotDetector $botDetector = null,
         ?CountryResolver $countryResolver = null,
         ?UserAgentClassifier $userAgentClassifier = null,
+        ?LanguageResolver $languageResolver = null,
     ) {
         $this->visitorHasher ??= new VisitorHasher(new SaltProvider());
         $this->eventQueue ??= $this->buildDefaultQueue();
@@ -46,6 +47,7 @@ final class EventController
         $this->botDetector = $botDetector ?? new BotDetector();
         $this->countryResolver = $countryResolver ?? new CountryResolver();
         $this->userAgentClassifier = $userAgentClassifier ?? new UserAgentClassifier();
+        $this->languageResolver = $languageResolver ?? new LanguageResolver();
     }
 
     private readonly ClientIpResolver $clientIpResolver;
@@ -53,6 +55,7 @@ final class EventController
     private readonly BotDetector $botDetector;
     private readonly CountryResolver $countryResolver;
     private readonly UserAgentClassifier $userAgentClassifier;
+    private readonly LanguageResolver $languageResolver;
 
     /**
      * @param list<array{user_id: string, site_id: string, role: string}> $accessRecords
@@ -193,6 +196,8 @@ final class EventController
             'country_code' => $this->countryResolver->resolve($_SERVER, $clientIp),
             'device_type' => $metadata['device_type'],
             'browser' => $metadata['browser'],
+            'operating_system' => $metadata['operating_system'],
+            'language_code' => $this->languageResolver->resolve($_SERVER),
             'created_at' => gmdate('c'),
         ];
 

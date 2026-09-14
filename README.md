@@ -34,6 +34,8 @@ Additional accounts can be created by an administrator in the web UI or with the
 
 Run the application from the configured web root with `public/` as the document root. The front controller serves the landing page, login flow, protected admin pages, and `POST /api/event`.
 
+Set `app.https` to `true` in production, including deployments behind an HTTPS reverse proxy.
+
 The background jobs are finite, cron-friendly commands:
 
 ```bash
@@ -48,7 +50,7 @@ The queue worker drains validated Redis events into `events_raw`, recovers reser
 
 Country metadata is resolved in memory from the configured MaxMind country database when available. Configure `geoip.country_database_path` in `config/config.php`. If the database is unavailable or has no result, ClearStats falls back to `CF-IPCountry` only when the request comes through a configured trusted proxy; otherwise country data remains empty.
 
-The tracker also supports ephemeral in-memory sessions, session-end engagement, bounce rate, sanitized UTM campaign attribution, conversion/custom events, scroll milestones, and click-event hooks. It never uses cookies, localStorage, sessionStorage, or persistent visitor IDs. Cross-day returning-visitor identification is intentionally not supported.
+The tracker also supports ephemeral in-memory sessions, session-end engagement, bounce rate, sanitized UTM campaign attribution, conversion/custom events, scroll milestones, and click-event hooks. ClearStats stores only coarse browser, operating-system, and preferred-language values derived at ingestion; it never stores raw User-Agent strings. It never uses cookies, localStorage, sessionStorage, or persistent visitor IDs. Cross-day returning-visitor identification is intentionally not supported.
 
 ## Project layout
 
