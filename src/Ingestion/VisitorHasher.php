@@ -24,8 +24,7 @@ final class VisitorHasher
 {
     public function __construct(
         private readonly SaltProvider $saltProvider,
-    ) {
-    }
+    ) {}
 
     public function hash(string $siteDomain, string $clientIp, string $userAgent, ?int $timestamp = null): string
     {

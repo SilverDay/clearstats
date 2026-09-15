@@ -81,6 +81,7 @@ $controllerMap = [
     'HomeController' => ClearStats\Http\HomeController::class,
     'InfoController' => ClearStats\Http\InfoController::class,
     'AuthController' => ClearStats\Http\AuthController::class,
+    'HealthController' => ClearStats\Http\HealthController::class,
     'DashboardController' => ClearStats\Http\DashboardController::class,
     'SiteController' => ClearStats\Http\SiteController::class,
     'UserController' => ClearStats\Http\UserController::class,
@@ -137,6 +138,20 @@ $controller = match ($controllerClass) {
         new ClearStats\Http\SiteRepository($dashboardDatabase->pdo()),
         new ClearStats\Http\AuthSession(),
     ),
+    ClearStats\Http\HealthController::class => new $controllerClass(
+        (new ClearStats\Db\Database($config['db']))->pdo(),
+        new ClearStats\Ingestion\EventQueue(
+            (function () use ($config): Redis {
+                $redis = new Redis();
+                $redis->connect((string) $config['redis']['host'], (int) $config['redis']['port']);
+                if ($config['redis']['database'] !== null) {
+                    $redis->select((int) $config['redis']['database']);
+                }
+                return $redis;
+            })(),
+        ),
+        (string) ($config['health']['token'] ?? ''),
+    ),
     ClearStats\Ingestion\EventController::class => new $controllerClass(
         new ClearStats\Domain\SiteValidation(),
         new ClearStats\Domain\SiteAccessPolicy(),
@@ -164,6 +179,24 @@ $controller = match ($controllerClass) {
         ),
         new ClearStats\Ingestion\UserAgentClassifier(),
         new ClearStats\Ingestion\LanguageResolver(),
+        new ClearStats\Ingestion\AbuseMonitor(
+            (function () use ($config): Redis {
+                $redis = new Redis();
+                $redis->connect((string) $config['redis']['host'], (int) $config['redis']['port']);
+                if ($config['redis']['database'] !== null) {
+                    $redis->select((int) $config['redis']['database']);
+                }
+                return $redis;
+            })(),
+            new ClearStats\Ingestion\SaltProvider(
+                null,
+                (new ClearStats\Db\Database($config['db']))->pdo(),
+                (int) ($config['salt']['rotation_hours'] ?? 24),
+            ),
+            (string) ($config['redis']['key_prefix'] ?? 'clearstats:'),
+            (int) ($config['ingestion']['abuse_limit'] ?? 20),
+            (int) ($config['ingestion']['abuse_window_seconds'] ?? 900),
+        ),
     ),
     default => new $controllerClass(),
 };
@@ -174,7 +207,7 @@ if (!method_exists($controller, $route['action'])) {
     return;
 }
 
-$isHtmlRoute = $route['controller'] !== 'EventController';
+$isHtmlRoute = !in_array($route['controller'], ['EventController', 'HealthController'], true);
 if ($isHtmlRoute) {
     ob_start();
 }

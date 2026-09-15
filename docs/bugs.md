@@ -170,9 +170,21 @@ Still missing:
 
 `clearstats:events:rejected` is capped at 1000 entries and holds no event bodies, so it
 cannot grow unbounded in the Redis instance shared with skyggn and cannot outlive the
-retention model. `bin/queue-worker.php` reports `rejected=N` so a rising count is
-visible.
+retention model. `bin/queue-worker.php` reports `rejected=N`, and `GET /health` exposes
+`queue.pending`, `queue.processing` and `queue.rejected` to a monitoring system that
+presents `Authorization: Bearer <health.token>`. Unauthenticated callers only ever see
+`ok` or `degraded`, because queue depth describes traffic on the tracked sites.
 
-What is still missing is alerting: nothing notices when that count climbs. A sustained
-bad-payload source would be silently discarded apart from the worker's stdout. Deciding
-where that signal should go — log, metric, or health endpoint — is still open.
+Sources that repeatedly send unacceptable payloads are now blocked at ingestion by
+`AbuseMonitor`: after `ingestion.abuse_limit` rejected requests inside
+`ingestion.abuse_window_seconds` the endpoint answers `429` without doing further work.
+Blocking has to happen there rather than in the worker \u2014 by the time a payload reaches
+the worker the client IP has been discarded, and an undecodable payload carries no
+`site_id` either. The counter is keyed by an HMAC of the IP under the daily salt and
+expires with the window, so nothing durable identifies the source and a block lifts by
+itself.
+
+Still open: the block is per ClearStats node. A deployment behind several app servers
+would need the counter shared (it already is, via Redis) *and* agreement that Redis stays
+the coordination point. Nothing pushes an alert anywhere; it remains pull-only via
+`/health`.

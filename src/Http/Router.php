@@ -21,6 +21,7 @@ final class Router
 
         $routes = [
             'GET /' => ['controller' => 'HomeController', 'action' => 'index'],
+            'GET /health' => ['controller' => 'HealthController', 'action' => 'index'],
             'GET /about' => ['controller' => 'InfoController', 'action' => 'about'],
             'GET /faq' => ['controller' => 'InfoController', 'action' => 'faq'],
             'GET /imprint' => ['controller' => 'InfoController', 'action' => 'imprint'],

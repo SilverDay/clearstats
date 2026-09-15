@@ -39,6 +39,7 @@ final class EventController
         ?CountryResolver $countryResolver = null,
         ?UserAgentClassifier $userAgentClassifier = null,
         ?LanguageResolver $languageResolver = null,
+        ?AbuseMonitor $abuseMonitor = null,
     ) {
         $this->visitorHasher ??= new VisitorHasher(new SaltProvider());
         $this->eventQueue ??= $this->buildDefaultQueue();
@@ -48,7 +49,10 @@ final class EventController
         $this->countryResolver = $countryResolver ?? new CountryResolver();
         $this->userAgentClassifier = $userAgentClassifier ?? new UserAgentClassifier();
         $this->languageResolver = $languageResolver ?? new LanguageResolver();
+        $this->abuseMonitor = $abuseMonitor;
     }
+
+    private readonly ?AbuseMonitor $abuseMonitor;
 
     private readonly ClientIpResolver $clientIpResolver;
     private readonly RequestRateLimiter $rateLimiter;
@@ -97,21 +101,32 @@ final class EventController
             return;
         }
 
+        // Resolved from the query string so a malformed body is still attributable;
+        // track.js posts to /api/event?site_id=...
+        $querySiteId = trim((string) ($_GET['site_id'] ?? ''));
+        $querySite = $querySiteId === '' ? null : $this->siteResolver?->resolve($querySiteId);
+        $sourceIp = $this->clientIpResolver->resolve((string) ($querySite['ip_source'] ?? 'direct'), $_SERVER);
+
+        if ($this->abuseMonitor !== null && !$this->abuseMonitor->allow($sourceIp)) {
+            $this->respondJson(429, ['error' => 'Too many rejected requests.']);
+            return;
+        }
+
         $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
         if ($contentLength > $this->maxPayloadBytes) {
-            $this->respondJson(413, ['error' => 'Payload is too large.']);
+            $this->rejectRequest(413, 'Payload is too large.', $sourceIp);
             return;
         }
 
         $payload = $this->readRequestPayload();
         if (!is_array($payload)) {
-            $this->respondJson(400, ['error' => 'Invalid JSON payload.']);
+            $this->rejectRequest(400, 'Invalid JSON payload.', $sourceIp);
             return;
         }
 
         $allowedFields = ['site_id', 'domain', 'event_type', 'url_path', 'referrer_url', 'event_name', 'props', 'session_id', 'session_started_at', 'engagement_seconds', 'campaign_source', 'campaign_medium', 'campaign_name'];
         if (array_diff(array_keys($payload), $allowedFields) !== []) {
-            $this->respondJson(400, ['error' => 'Unexpected event fields.']);
+            $this->rejectRequest(400, 'Unexpected event fields.', $sourceIp);
             return;
         }
 
@@ -125,16 +140,16 @@ final class EventController
         $userAgent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
         $origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
         $requestHost = $this->extractHostFromUrl($origin !== '' ? $origin : $referrerUrl);
-        $site = $this->siteResolver?->resolve($siteId);
+        $site = $siteId === $querySiteId ? $querySite : $this->siteResolver?->resolve($siteId);
         $configuredDomain = (string) ($site['domain'] ?? ($payload['domain'] ?? ''));
 
         if ($siteId === '' || $configuredDomain === '') {
-            $this->respondJson(400, ['error' => 'Missing required event fields.']);
+            $this->rejectRequest(400, 'Missing required event fields.', $sourceIp);
             return;
         }
 
         if ($this->siteResolver !== null && $site === null) {
-            $this->respondJson(404, ['error' => 'Unknown or inactive site.']);
+            $this->rejectRequest(404, 'Unknown or inactive site.', $sourceIp);
             return;
         }
 
@@ -144,7 +159,7 @@ final class EventController
         }
 
         if ($userAgent === '') {
-            $this->respondJson(400, ['error' => 'User-Agent header is required.']);
+            $this->rejectRequest(400, 'User-Agent header is required.', $sourceIp);
             return;
         }
 
@@ -154,17 +169,17 @@ final class EventController
         }
 
         if (!in_array($eventType, ['pageview', 'custom', 'session_end'], true)) {
-            $this->respondJson(400, ['error' => 'Invalid event type.']);
+            $this->rejectRequest(400, 'Invalid event type.', $sourceIp);
             return;
         }
 
         if ($urlPath === '' || strlen($urlPath) > 2048) {
-            $this->respondJson(400, ['error' => 'Invalid URL path.']);
+            $this->rejectRequest(400, 'Invalid URL path.', $sourceIp);
             return;
         }
 
         if ($requestHost === '' || !$this->siteValidation->isValidSiteDomain($configuredDomain, $requestHost)) {
-            $this->respondJson(403, ['error' => 'Origin does not match the configured site domain.']);
+            $this->rejectRequest(403, 'Origin does not match the configured site domain.', $sourceIp);
             return;
         }
 
@@ -242,6 +257,13 @@ final class EventController
         http_response_code($statusCode);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+    }
+
+    /** Counts the rejection against the source before answering, so repeat offenders trip the block. */
+    private function rejectRequest(int $statusCode, string $error, string $clientIp): void
+    {
+        $this->abuseMonitor?->recordRejection($clientIp);
+        $this->respondJson($statusCode, ['error' => $error]);
     }
 
     private function parseClientTimestamp(mixed $value): ?string

@@ -33,10 +33,21 @@ return [
         'max_payload_bytes' => 32768,
         'rate_limit_per_minute' => 120,
         'request_timeout_seconds' => 10,
+        // Block a source after this many rejected requests in the window. The IP is
+        // hashed with the daily salt, never stored; the block lifts when the window
+        // expires. Set the limit to 0 to disable.
+        'abuse_limit' => 20,
+        'abuse_window_seconds' => 900,
         'trusted_proxy_ips' => [
             '127.0.0.1',
             '10.0.0.0/8',
         ],
+    ],
+
+    // GET /health always reports ok/degraded. Set a token to also expose queue
+    // counts to a monitoring system via `Authorization: Bearer <token>`.
+    'health' => [
+        'token' => '',
     ],
 
     // Salt rotation — see spec §3.2. Never log or expose this value.
