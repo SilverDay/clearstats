@@ -40,9 +40,11 @@ return [
     ],
 
     // Salt rotation — see spec §3.2. Never log or expose this value.
+    // Rotation is aligned to UTC period boundaries, so 24 gives exactly one
+    // salt per calendar day. Other values split a day across two salts and
+    // inflate unique-visitor counts.
     'salt' => [
         'rotation_hours' => 24,
-        'previous_window_hours' => 1,
     ],
 
     // Default retention policy for raw events.

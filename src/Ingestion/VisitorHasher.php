@@ -16,6 +16,9 @@ namespace ClearStats\Ingestion;
  *   into the hash input specifically to prevent cross-site correlation.
  * - Callers MUST NOT persist $clientIp or $userAgent anywhere. This class
  *   only ever returns the hash; it does not log or store its inputs.
+ * - Pass the event's own timestamp so the salt matches the rollup day the
+ *   event will be counted in; otherwise a visitor seen either side of a
+ *   rotation is counted twice.
  */
 final class VisitorHasher
 {
@@ -24,9 +27,9 @@ final class VisitorHasher
     ) {
     }
 
-    public function hash(string $siteDomain, string $clientIp, string $userAgent): string
+    public function hash(string $siteDomain, string $clientIp, string $userAgent, ?int $timestamp = null): string
     {
-        $salt = $this->saltProvider->currentSalt();
+        $salt = $this->saltProvider->saltForTimestamp($timestamp ?? time());
 
         return hash_hmac(
             'sha256',

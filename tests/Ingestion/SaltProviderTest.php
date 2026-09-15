@@ -45,4 +45,25 @@ final class SaltProviderTest extends TestCase
         $this->assertSame('old-salt', $row['previous_salt']);
         $this->assertNotSame('old-salt', $current);
     }
+
+    public function testSaltIsStableAcrossAUtcDayAndRotatesAtTheBoundary(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $provider = new SaltProvider(null, $pdo, 24);
+
+        $firstRequest = (int) strtotime('2026-03-10 00:00:01 UTC');
+        $midDay = (int) strtotime('2026-03-10 13:45:00 UTC');
+        $lastSecond = (int) strtotime('2026-03-10 23:59:59 UTC');
+        $nextDay = (int) strtotime('2026-03-11 00:00:00 UTC');
+
+        $salt = $provider->saltForTimestamp($firstRequest);
+
+        $this->assertSame($salt, $provider->saltForTimestamp($midDay));
+        $this->assertSame($salt, $provider->saltForTimestamp($lastSecond));
+
+        $rotated = $provider->saltForTimestamp($nextDay);
+        $this->assertNotSame($salt, $rotated);
+        $this->assertSame($salt, $pdo->query('SELECT previous_salt FROM salt_state WHERE id = 1')->fetchColumn());
+    }
 }

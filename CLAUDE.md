@@ -40,6 +40,7 @@ ClearStats (clearstats.de) is a self-hosted, multi-site, GDPR-compliant, cookiel
 | Area | Decision |
 |---|---|
 | Salt scope | Single shared salt across all sites, domain baked into hash input |
+| Salt rotation boundary | Aligned to the UTC day (not "24h since last rotation"), and the salt is selected from the event's own timestamp — one salt per rollup day |
 | Client architecture | JS snippet (not server-to-server PHP dispatch) |
 | Reverse proxy IP handling | Configurable per site |
 | Raw event retention | Configurable per tenant |

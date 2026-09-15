@@ -175,6 +175,9 @@ final class EventController
         }
 
         $metadata = $this->userAgentClassifier->classify($userAgent);
+        // One instant for both the salt period and created_at, so they cannot
+        // straddle a rotation boundary.
+        $receivedAt = time();
         $event = [
             'event_id' => bin2hex(random_bytes(32)),
             'site_id' => $siteId,
@@ -184,6 +187,7 @@ final class EventController
                 $configuredDomain,
                 $clientIp,
                 $userAgent,
+                $receivedAt,
             ),
             'event_type' => $eventType,
             'event_name' => (string) ($payload['event_name'] ?? ''),
@@ -198,7 +202,7 @@ final class EventController
             'browser' => $metadata['browser'],
             'operating_system' => $metadata['operating_system'],
             'language_code' => $this->languageResolver->resolve($_SERVER),
-            'created_at' => gmdate('c'),
+            'created_at' => gmdate('c', $receivedAt),
         ];
 
         $this->eventQueue->push($event);

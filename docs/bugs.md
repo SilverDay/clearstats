@@ -1,8 +1,7 @@
 # Bug report — triage status
 
-Status as of 2026-09-15. Four of five findings are fixed and pushed; one is
-partially addressed and still needs a decision. See the closing section for the
-regression tests that are still missing.
+Status as of 2026-09-15. All five findings are fixed and pushed. See the closing
+section for the regression tests that are still missing and one operational gap.
 
 | # | Finding | Status |
 |---|---|---|
@@ -10,7 +9,7 @@ regression tests that are still missing.
 | 2 | One corrupted Redis event can repeatedly stop the queue worker | **Fixed** |
 | 3 | First-use salt initialization has a race condition | **Fixed** |
 | 4 | Engagement duration wraps after one hour | **Fixed** |
-| 5 | Salt rotation does not implement the documented boundary behaviour | **Partially fixed — open** |
+| 5 | Salt rotation does not implement the documented boundary behaviour | **Fixed** |
 
 Fixes landed in commits `3f1b129` (ingestion) and `b192567` (duration formatting).
 
@@ -98,34 +97,43 @@ covers `3599`, `3600` and `86400`.
 
 ---
 
-### 5. Salt rotation does not implement the documented boundary behaviour — Partially fixed, still open
+### 5. Salt rotation does not implement the documented boundary behaviour — Fixed
 
-**What was fixed.** Rotation is now atomic (see #3), so simultaneous requests can no
-longer rotate twice and destroy a salt that is still in use.
+`VisitorHasher::hash()` read only `currentSalt()`, and rotation fired 24h after the
+last rotation rather than on a fixed boundary. A rotation landing mid-day therefore
+gave one visitor two hashes inside a single calendar day, and the rollup counts
+`COUNT(DISTINCT visitor_hash)` grouped by `DATE(created_at)` — so that visitor was
+counted twice.
 
-**What is still broken.** The underlying finding stands:
-[`VisitorHasher::hash()`](../src/Ingestion/VisitorHasher.php) still reads only
-`currentSalt()`. `SaltProvider` writes `previous_salt`, but nothing ever reads it, so
-the class documentation still promises current/previous handling that the implementation
-does not provide. Requests either side of a rotation boundary continue to produce
-different hashes for the same visitor, which can temporarily inflate unique-visitor
-counts. This does not crash anything.
+**Resolution.** Spec §3.2's recommendation ("bucket by day using the salt's generation
+timestamp, not wall-clock") is now implemented as period alignment:
 
-**Why it was not fixed here.** Resolving it properly is a data-model decision, not a
-patch, and spec §3.2 leaves the boundary handling explicitly "to be defined at
-implementation time". The options are not equivalent:
+- `SaltProvider::saltForTimestamp()` rotates when the request's period differs from the
+  stored salt's period, where the period is `intdiv($timestamp, rotation_hours * 3600)`.
+  With the default 24 that is exactly the UTC day, so a calendar day always resolves to
+  one salt no matter when the first request of that day arrives.
+- `EventController` takes a single `time()` reading and uses it for both the salt lookup
+  and `created_at`, so the hash and the rollup bucket cannot land on opposite sides of a
+  boundary — which closes the split-second case the spec called out.
 
-- **Bucket by the salt's generation timestamp** rather than wall clock, as §3.2
-  recommends. Cleanest, but the rollup's notion of a "day" then has to follow the salt
-  epoch rather than the calendar date, which affects `daily_*_stats` keys.
-- **Hash with the current salt and additionally check the previous salt** when counting
-  uniques. Preserves calendar-day rollups, but the dedupe cost moves into the rollup and
-  raw events would need to retain both hashes.
-- **Accept the boundary error.** Rotation is once per 24h, so the inflation is bounded
-  and arguably below the noise floor of an aggregate-only product.
+Because one calendar day now maps to exactly one salt, dual-salt hashing is unnecessary:
+`previous_salt` is still written for recovery, but no read path needs it. The
+`VisitorHasher` docblock has been corrected to describe what the code actually does.
 
-This needs an owner decision before implementation. Until then, the docblock on
-`VisitorHasher` overstates what the code does.
+**Tests.**
+- `SaltProviderTest::testSaltIsStableAcrossAUtcDayAndRotatesAtTheBoundary` — same salt at
+  `00:00:01`, mid-day and `23:59:59`; a new one at the next midnight, with the old value
+  retained as `previous_salt`.
+- `VisitorHasherTest::testSameVisitorKeepsOneHashPerRollupDay` — one visitor hashes
+  identically morning and evening, and differently the next day.
+
+Verified against the real aggregate: one visitor with five events from `00:00:05` to
+`23:59:58` yields `uniques=1` for that date.
+
+> `rotation_hours` values other than 24 split a calendar day across two salts and
+> reintroduce the inflation. Documented in `config/config.example.php`. The unused
+> `previous_window_hours` key was removed — nothing ever read it, and period alignment
+> makes a grace window unnecessary.
 
 ---
 
@@ -136,6 +144,8 @@ Added:
 - Malformed queued payload does not prevent later valid events from processing.
 - Durations of `3599`, `3600` and `86400` seconds format correctly.
 - Expired-salt rotation yields one winner and preserves the previous salt.
+- Salt is stable across a UTC day and rotates at the boundary.
+- One visitor keeps a single hash per rollup day.
 
 Still missing:
 
@@ -146,5 +156,11 @@ Still missing:
   Needs genuine parallel connections; the current test is single-threaded.
 - **Portfolio engagement average is an `int`.** `DashboardQueryTest` exercises
   `portfolioOverview()` but asserts nothing about the type of `avg_engagement_seconds`.
-- **Salt rotation matches the intended visitor-counting model.** Blocked on the decision
-  in finding 5 — there is no agreed behaviour to assert yet.
+
+## Operational gap
+
+Nothing drains or inspects `clearstats:events:dead-letter`. It exists so a poison message
+leaves the processing list instead of stalling the worker, but it is currently a parking
+lot with no exit: no retention, no alerting, no requeue path. Under a sustained
+bad-payload source it grows unbounded in a Redis instance that is shared with skyggn.
+Needs a decision on retention and on whether operators get a way to inspect or replay it.

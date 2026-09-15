@@ -10,16 +10,19 @@ namespace ClearStats\Ingestion;
 use PDO;
 
 /**
- * Provides the current daily HMAC salt, per docs/analytics-platform-spec.md §3.2.
+ * Provides the daily HMAC salt, per docs/analytics-platform-spec.md §3.2.
  *
- * - Rotated every 24h by a scheduled job.
  * - Never exposed via any API response, never logged, never sent to any client.
- * - Must handle the current + previous salt to avoid split-second boundary
- *   issues right after rotation (see spec §3.2 for the recommended approach:
- *   bucket by day using the salt's generation timestamp, not wall-clock).
+ * - Rotation is aligned to fixed period boundaries (the UTC day by default)
+ *   rather than "N hours since the last rotation", so every event inside one
+ *   calendar day hashes with the same salt. Without that alignment a visitor
+ *   seen either side of a rotation produces two hashes and inflates
+ *   COUNT(DISTINCT visitor_hash) in the daily rollup.
+ * - Callers pass the timestamp they will also store as created_at, so the salt
+ *   and the rollup bucket cannot disagree across a boundary.
  *
- * The production provider stores current/previous state in MariaDB and rotates
- * when the configured age is exceeded. Tests may inject a fixed salt.
+ * A rotation_hours value other than 24 splits a calendar day across two salts
+ * and reintroduces that inflation; 24 is the supported setting.
  */
 final class SaltProvider
 {
@@ -33,6 +36,12 @@ final class SaltProvider
 
     public function currentSalt(): string
     {
+        return $this->saltForTimestamp(time());
+    }
+
+    /** Salt covering the rotation period that $timestamp falls in. */
+    public function saltForTimestamp(int $timestamp): string
+    {
         if ($this->fixedSalt !== null) {
             return $this->fixedSalt;
         }
@@ -40,22 +49,16 @@ final class SaltProvider
             return $this->processSalt ??= bin2hex(random_bytes(32));
         }
 
-        $row = $this->pdo->query('SELECT current_salt, generated_at FROM salt_state WHERE id = 1')->fetch();
+        $row = $this->readState();
         if (!is_array($row)) {
-            $salt = bin2hex(random_bytes(32));
-            $generatedAt = gmdate('Y-m-d H:i:s');
-            $sql = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
-                ? 'INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, :current_salt, NULL, :generated_at) ON CONFLICT(id) DO NOTHING'
-                : 'INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, :current_salt, NULL, :generated_at) ON DUPLICATE KEY UPDATE id = id';
-            $statement = $this->pdo->prepare($sql);
-            $statement->execute(['current_salt' => $salt, 'generated_at' => $generatedAt]);
-            $row = $this->pdo->query('SELECT current_salt, generated_at FROM salt_state WHERE id = 1')->fetch();
+            $this->initialise($timestamp);
+            $row = $this->readState();
         }
 
         $generatedAt = new \DateTimeImmutable((string) $row['generated_at'], new \DateTimeZone('UTC'));
-        if (time() - $generatedAt->getTimestamp() >= max(1, $this->rotationHours) * 3600) {
-            $this->rotateIfUnchanged((string) $row['generated_at']);
-            $row = $this->pdo->query('SELECT current_salt FROM salt_state WHERE id = 1')->fetch();
+        if ($this->period($timestamp) !== $this->period($generatedAt->getTimestamp())) {
+            $this->rotateIfUnchanged((string) $row['generated_at'], $timestamp);
+            $row = $this->readState();
         }
 
         return (string) ($row['current_salt'] ?? '');
@@ -80,14 +83,39 @@ final class SaltProvider
         ]);
     }
 
-    private function rotateIfUnchanged(string $generatedAt): void
+    private function period(int $timestamp): int
+    {
+        return intdiv($timestamp, max(1, $this->rotationHours) * 3600);
+    }
+
+    private function readState(): mixed
+    {
+        $statement = $this->pdo?->query('SELECT current_salt, generated_at FROM salt_state WHERE id = 1');
+
+        return $statement === false || $statement === null ? false : $statement->fetch();
+    }
+
+    private function initialise(int $timestamp): void
+    {
+        $sql = $this->pdo?->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+            ? 'INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, :current_salt, NULL, :generated_at) ON CONFLICT(id) DO NOTHING'
+            : 'INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, :current_salt, NULL, :generated_at) ON DUPLICATE KEY UPDATE id = id';
+
+        $statement = $this->pdo?->prepare($sql);
+        $statement?->execute([
+            'current_salt' => bin2hex(random_bytes(32)),
+            'generated_at' => gmdate('Y-m-d H:i:s', $timestamp),
+        ]);
+    }
+
+    private function rotateIfUnchanged(string $generatedAt, int $timestamp): void
     {
         $statement = $this->pdo?->prepare(
             'UPDATE salt_state SET previous_salt = current_salt, current_salt = :current_salt, generated_at = :new_generated_at WHERE id = 1 AND generated_at = :expected_generated_at',
         );
         $statement?->execute([
             'current_salt' => bin2hex(random_bytes(32)),
-            'new_generated_at' => gmdate('Y-m-d H:i:s'),
+            'new_generated_at' => gmdate('Y-m-d H:i:s', $timestamp),
             'expected_generated_at' => $generatedAt,
         ]);
     }
