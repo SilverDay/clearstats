@@ -1,22 +1,34 @@
-Yes. I found three high-confidence latent failures and two correctness risks in the current ClearStats repository.
+# Bug report — triage status
+
+Status as of 2026-09-15. Four of five findings are fixed and pushed; one is
+partially addressed and still needs a decision. See the closing section for the
+regression tests that are still missing.
+
+| # | Finding | Status |
+|---|---|---|
+| 1 | Malformed tracking JSON can produce HTTP 500 | **Fixed** |
+| 2 | One corrupted Redis event can repeatedly stop the queue worker | **Fixed** |
+| 3 | First-use salt initialization has a race condition | **Fixed** |
+| 4 | Engagement duration wraps after one hour | **Fixed** |
+| 5 | Salt rotation does not implement the documented boundary behaviour | **Partially fixed — open** |
+
+Fixes landed in commits `3f1b129` (ingestion) and `b192567` (duration formatting).
 
 ## Priority findings
 
-### 1. Malformed tracking JSON can produce HTTP 500
+### 1. Malformed tracking JSON can produce HTTP 500 — Fixed
 
-In [`src/Ingestion/EventController.php`](https://github.com/SilverDay/clearstats/blob/main/src/Ingestion/EventController.php), `readRequestPayload()` uses:
+In [`src/Ingestion/EventController.php`](../src/Ingestion/EventController.php), `readRequestPayload()` used:
 
 ```php
 $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
 ```
 
-But the resulting `JsonException` is not caught. A malformed request to the public ingestion endpoint therefore bypasses:
+The resulting `JsonException` was not caught, so a malformed request to the public
+ingestion endpoint bypassed the intended `400` response.
 
-```php
-$this->respondJson(400, ['error' => 'Invalid JSON payload.']);
-```
-
-Fix:
+**Resolution.** The decode is wrapped and returns `null` on failure, which the caller
+already maps to `400 Invalid JSON payload.`:
 
 ```php
 try {
@@ -26,110 +38,113 @@ try {
 }
 ```
 
-This should be fixed soon because arbitrary Internet clients can trigger it.
+---
+
+### 2. One corrupted Redis event can repeatedly stop the queue worker — Fixed
+
+An invalid payload threw and terminated the whole worker. The payload stayed in the
+processing list, and the next run's `recoverProcessing()` returned it to the queue —
+a poison-message loop.
+
+**Resolution.** `QueueWorker::processBatch()` now guards each event individually.
+`EventQueue::reject()` moves the payload to `clearstats:events:dead-letter` and
+acknowledges it, so it leaves the processing list permanently and later valid events
+still drain. The dead-letter record stores the payload and a reason string; it is not
+written to the application log, so analytics fields are not scattered into log files.
+
+**Test.** `QueueWorkerTest::testRejectsMalformedEventAndContinuesWithLaterValidEvent`
+pushes `{malformed` ahead of a valid event and asserts the valid one is still inserted,
+the dead-letter list has one entry, and the processing list is empty.
+
+> **Operational note:** nothing drains `clearstats:events:dead-letter` yet. It will grow
+> unbounded under a sustained bad-payload source. Needs a retention or alerting decision.
 
 ---
 
-### 2. One corrupted Redis event can repeatedly stop the queue worker
+### 3. First-use salt initialization has a race condition — Fixed
 
-In [`src/Ingestion/QueueWorker.php`](https://github.com/SilverDay/clearstats/blob/main/src/Ingestion/QueueWorker.php):
+Two simultaneous first tracking requests could both see no row and both attempt the
+insert; the loser received a duplicate-primary-key exception and ingestion failed.
 
-```php
-$event = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
-```
+**Resolution.** Initialization is an atomic upsert followed by a read, so the request
+that loses the race uses the winner's salt rather than its own generated value
+(`ON CONFLICT(id) DO NOTHING` on SQLite, `ON DUPLICATE KEY UPDATE id = id` on MariaDB).
 
-An invalid payload throws and terminates the entire worker. The payload remains in the processing list. On the next run, `recoverProcessing()` returns it to the queue, where it can fail again.
+Rotation had the same shape of problem — two requests could both observe an expired
+salt and rotate twice, discarding a salt that was still in use. Rotation triggered from
+`currentSalt()` is now a compare-and-swap against the observed `generated_at`, so only
+one request performs the transition.
 
-This is a classic poison-message loop.
+**Test.** `SaltProviderTest::testExpiredSaltRotationKeepsOneWinner` asserts the rotation
+produces one new current salt and preserves the prior value as `previous_salt`.
 
-The worker should catch failures per event and move bad payloads to a dead-letter queue, then acknowledge/remove them from processing:
-
-```php
-try {
-    $event = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
-
-    if (!is_array($event)) {
-        throw new \RuntimeException('Queued event must decode to an object.');
-    }
-
-    // Insert event...
-    $this->queue->acknowledge($payload);
-    $processed++;
-} catch (\Throwable $exception) {
-    $this->queue->reject($payload, $exception->getMessage());
-}
-```
-
-Do not log the complete payload because analytics fields could contain sensitive or unexpected data.
+> **Gap:** this is still single-threaded coverage. The concurrency-oriented integration
+> test called for in the original report has not been written — see below.
 
 ---
-
-### 3. First-use salt initialization has a race condition
-
-In [`src/Ingestion/SaltProvider.php`](https://github.com/SilverDay/clearstats/blob/main/src/Ingestion/SaltProvider.php):
-
-```php
-$row = $this->pdo
-    ->query('SELECT current_salt, generated_at FROM salt_state WHERE id = 1')
-    ->fetch();
-
-if (!is_array($row)) {
-    // ...
-    INSERT INTO salt_state (id, ...)
-}
-```
-
-Two simultaneous first tracking requests can both see no row and both attempt the insert. One receives a duplicate-primary-key exception, causing ingestion to fail.
-
-Use an atomic upsert and then read the stored value. Importantly, the request that loses the race must use the winner’s salt, not its independently generated salt.
-
-This needs a concurrency-oriented integration test.
 
 ## Correctness risks
 
-### 4. Engagement duration wraps after one hour
+### 4. Engagement duration wraps after one hour — Fixed
 
-Both dashboard branches use:
+Both dashboard branches used `gmdate('i:s', $seconds)`, so `3600` rendered as `00:00`
+rather than `60:00`, while engagement is allowed up to 86,400 seconds.
 
-```php
-gmdate('i:s', $overview['avg_engagement_seconds']);
-```
+**Resolution.** Both branches call a shared `formatDuration()` that promotes to an
+`H:MM:SS` form past the hour.
 
-`gmdate('i:s', 3600)` returns `00:00`, not `60:00`. Since engagement is allowed up to 86,400 seconds, longer averages will display incorrectly.
-
-Use an explicit duration formatter:
-
-```php
-private function formatDuration(int $seconds): string
-{
-    $seconds = max(0, $seconds);
-    $hours = intdiv($seconds, 3600);
-    $minutes = intdiv($seconds % 3600, 60);
-    $remainingSeconds = $seconds % 60;
-
-    return $hours > 0
-        ? sprintf('%d:%02d:%02d', $hours, $minutes, $remainingSeconds)
-        : sprintf('%02d:%02d', $minutes, $remainingSeconds);
-}
-```
+**Test.** `DashboardControllerTest::testFormatsDurationsWithoutWrappingAtOneHour`
+covers `3599`, `3600` and `86400`.
 
 ---
 
-### 5. Salt rotation does not implement the documented boundary behaviour
+### 5. Salt rotation does not implement the documented boundary behaviour — Partially fixed, still open
 
-`SaltProvider` stores `previous_salt`, but `VisitorHasher` appears to use only `currentSalt()`. At rotation time, simultaneous requests can therefore be hashed with different salts around the boundary.
+**What was fixed.** Rotation is now atomic (see #3), so simultaneous requests can no
+longer rotate twice and destroy a salt that is still in use.
 
-This will not crash the application, but it can temporarily inflate unique-visitor counts. The class documentation explicitly promises current/previous-salt handling that the implementation does not currently provide.
+**What is still broken.** The underlying finding stands:
+[`VisitorHasher::hash()`](../src/Ingestion/VisitorHasher.php) still reads only
+`currentSalt()`. `SaltProvider` writes `previous_salt`, but nothing ever reads it, so
+the class documentation still promises current/previous handling that the implementation
+does not provide. Requests either side of a rotation boundary continue to produce
+different hashes for the same visitor, which can temporarily inflate unique-visitor
+counts. This does not crash anything.
 
-## Missing regression tests
+**Why it was not fixed here.** Resolving it properly is a data-model decision, not a
+patch, and spec §3.2 leaves the boundary handling explicitly "to be defined at
+implementation time". The options are not equivalent:
 
-I would add these tests first:
+- **Bucket by the salt's generation timestamp** rather than wall clock, as §3.2
+  recommends. Cleanest, but the rollup's notion of a "day" then has to follow the salt
+  epoch rather than the calendar date, which affects `daily_*_stats` keys.
+- **Hash with the current salt and additionally check the previous salt** when counting
+  uniques. Preserves calendar-day rollups, but the dedupe cost moves into the rollup and
+  raw events would need to retain both hashes.
+- **Accept the boundary error.** Rotation is once per 24h, so the inflation is bounded
+  and arguably below the noise floor of an aggregate-only product.
 
-* Malformed ingestion JSON returns `400`, not an uncaught exception.
-* A malformed queued payload does not prevent later valid events from processing.
-* Simultaneous salt initialization produces one database row and one effective salt.
-* Portfolio engagement average is an `int`.
-* Durations of `3599`, `3600`, and `86400` seconds format correctly.
-* Salt rotation behaviour matches the intended visitor-counting model.
+This needs an owner decision before implementation. Until then, the docblock on
+`VisitorHasher` overstates what the code does.
 
-The malformed public JSON and poison-queue issues are the most urgent. They have the same character as the `gmdate()` issue: normal tests pass, but a particular production input activates a previously untouched failure path.
+---
+
+## Regression tests
+
+Added:
+
+- Malformed queued payload does not prevent later valid events from processing.
+- Durations of `3599`, `3600` and `86400` seconds format correctly.
+- Expired-salt rotation yields one winner and preserves the previous salt.
+
+Still missing:
+
+- **Malformed ingestion JSON returns `400`, not an uncaught exception.** The fix is in
+  place but untested: `readRequestPayload()` reads `php://input` directly, so it is not
+  reachable from a unit test without extracting a seam for the raw request body.
+- **Simultaneous salt initialization produces one database row and one effective salt.**
+  Needs genuine parallel connections; the current test is single-threaded.
+- **Portfolio engagement average is an `int`.** `DashboardQueryTest` exercises
+  `portfolioOverview()` but asserts nothing about the type of `avg_engagement_seconds`.
+- **Salt rotation matches the intended visitor-counting model.** Blocked on the decision
+  in finding 5 — there is no agreed behaviour to assert yet.
