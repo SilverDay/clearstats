@@ -52,6 +52,8 @@ Country metadata is resolved in memory from the configured MaxMind country datab
 
 The tracker also supports ephemeral in-memory sessions, session-end engagement, bounce rate, sanitized UTM campaign attribution, conversion/custom events, scroll milestones, and click-event hooks. ClearStats stores only coarse browser, operating-system, and preferred-language values derived at ingestion; it never stores raw User-Agent strings. It never uses cookies, localStorage, sessionStorage, or persistent visitor IDs. Cross-day returning-visitor identification is intentionally not supported.
 
+See [docs/tracking-guide.md](docs/tracking-guide.md) for tracker installation, campaign attribution, conversion events, custom events, interaction hooks, privacy boundaries, and dashboard processing timing.
+
 ## Project layout
 
 ```

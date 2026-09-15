@@ -53,7 +53,7 @@ final class DashboardQuery
         $statement->execute($params);
         $row = $statement->fetch() ?: [];
         $sessions = (int) ($row['sessions'] ?? 0);
-        return ['pageviews' => (int) $row['pageviews'], 'unique_visitor_hashes_count' => (int) $row['unique_visitor_hashes_count'], 'sessions' => $sessions, 'bounces' => (int) $row['bounces'], 'avg_engagement_seconds' => $sessions > 0 ? (int) $row['engagement_total'] / $sessions : 0, 'bounce_rate' => $sessions > 0 ? ((int) $row['bounces'] / $sessions) * 100 : null];
+        return ['pageviews' => (int) $row['pageviews'], 'unique_visitor_hashes_count' => (int) $row['unique_visitor_hashes_count'], 'sessions' => $sessions, 'bounces' => (int) $row['bounces'], 'avg_engagement_seconds' => $sessions > 0 ? (int) round((int) $row['engagement_total'] / $sessions) : 0, 'bounce_rate' => $sessions > 0 ? ((int) $row['bounces'] / $sessions) * 100 : null];
     }
 
     /** @param list<string> $siteIds */
