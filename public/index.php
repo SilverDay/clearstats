@@ -183,15 +183,54 @@ $controller->{$route['action']}();
 
 if ($isHtmlRoute) {
     $html = (string) ob_get_clean();
-    $themeScript = '<link rel="stylesheet" href="/css/app-shell.css"><script defer src="/js/theme.js"></script>';
+
+    // Runs before first paint so a stored dark preference never flashes light.
+    $themeBoot = <<<'JS'
+<script>try{var m=localStorage.getItem('clearstats-theme');var d=m==='dark'||((!m||m==='system')&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}</script>
+JS;
+
+    $assets = '<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>'
+        . '<link rel="stylesheet" href="/css/app-shell.css?v=6">'
+        . $themeBoot
+        . '<script defer src="/js/theme.js?v=5"></script>';
+
+    $navLink = static function (string $href, string $label) use ($path): string {
+        return sprintf(
+            '<a href="%s"%s>%s</a>',
+            $href,
+            $path === $href ? ' aria-current="page"' : '',
+            $label,
+        );
+    };
+
     $navigation = '';
     if ($isAuthenticated) {
-        $navigation = '<nav class="clearstats-app-nav" aria-label="Primary navigation"><a class="clearstats-nav-brand" href="/dashboard">ClearStats</a><div class="clearstats-nav-links"><a href="/dashboard">Dashboard</a><a href="/sites">Sites</a>'
-            . ($isAdmin ? '<a href="/users">Users</a>' : '')
-            . '<a href="/password">Password</a><form method="post" action="/logout" class="clearstats-logout-form"><input type="hidden" name="_csrf" value="' . htmlspecialchars($session->csrfToken(), ENT_QUOTES, 'UTF-8') . '"><button type="submit">Log out</button></form></div><div id="clearstats-theme-slot"></div></nav>';
+        $links = $navLink('/dashboard', 'Dashboard')
+            . $navLink('/sites', 'Sites')
+            . ($isAdmin ? $navLink('/users', 'Users') : '')
+            . $navLink('/password', 'Password');
+        $end = '<div id="clearstats-theme-slot"></div>'
+            . '<form method="post" action="/logout"><input type="hidden" name="_csrf" value="'
+            . htmlspecialchars($session->csrfToken(), ENT_QUOTES, 'UTF-8')
+            . '"><button class="btn btn-sm btn-ghost" type="submit">Log out</button></form>';
+        $home = '/dashboard';
+    } else {
+        $links = $navLink('/about', 'About') . $navLink('/faq', 'FAQ');
+        $end = '<div id="clearstats-theme-slot"></div><a class="btn btn-sm btn-primary" href="/login">Log in</a>';
+        $home = '/';
     }
-    $navigationStyle = '<style>.clearstats-app-nav{position:sticky;top:0;z-index:900;display:flex;align-items:center;gap:24px;min-height:58px;padding:10px 24px;background:rgba(9,15,25,.96);border-bottom:1px solid rgba(148,163,184,.18);font:14px/1.2 Inter,"Segoe UI",sans-serif}.clearstats-nav-brand{color:#f8fafc;font-weight:800;letter-spacing:.04em;text-decoration:none}.clearstats-nav-links{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.clearstats-nav-links a{color:#dbeafe;text-decoration:none}.clearstats-nav-links a:hover,.clearstats-nav-links a:focus{color:#7ae7ff;text-decoration:underline;text-underline-offset:3px}.clearstats-nav-links a:focus,.clearstats-nav-brand:focus{outline:2px solid #7ae7ff;outline-offset:3px}.clearstats-app-nav #clearstats-theme-slot{margin-left:auto}.clearstats-app-nav .clearstats-theme-control{position:static;box-shadow:none;padding:0;border:0;background:transparent}.clearstats-app-nav .clearstats-theme-control select{min-width:82px}@media(max-width:700px){.clearstats-app-nav{align-items:flex-start;flex-wrap:wrap;padding:12px 16px}.clearstats-nav-links{gap:12px}.clearstats-app-nav #clearstats-theme-slot{margin-left:0}}[data-theme="light"] .clearstats-app-nav{background:#ffffff;border-color:#c5d0dc}[data-theme="light"] .clearstats-nav-brand,[data-theme="light"] .clearstats-nav-links a{color:#183047}[data-theme="light"] .clearstats-nav-links a:hover,[data-theme="light"] .clearstats-nav-links a:focus{color:#075985}</style>';
-    $bodyClass = $isAuthenticated ? ' class="clearstats-app-page"' : '';
-    $html = str_replace('<body>', '<body' . $bodyClass . '>' . $navigationStyle . $navigation, $html);
-    echo str_replace('</head>', $themeScript . '</head>', $html);
+
+    $navigation = '<header class="topnav"><div class="topnav-inner">'
+        . '<a class="topnav-brand" href="' . $home . '">ClearStats</a>'
+        . '<nav class="topnav-links" aria-label="Primary navigation">' . $links . '</nav>'
+        . '<div class="topnav-end">' . $end . '</div>'
+        . '</div></header>';
+
+    $html = (string) (preg_replace_callback(
+        '/<body\b[^>]*>/i',
+        static fn(array $match): string => $match[0] . $navigation,
+        $html,
+        1,
+    ) ?? $html);
+    echo str_replace('</head>', $assets . '</head>', $html);
 }
