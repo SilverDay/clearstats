@@ -102,7 +102,7 @@ final class QueueWorkerTest extends TestCase
         $pdo = $database->pdo();
         $redis = new \Redis();
         $redis->connect('127.0.0.1', 6379);
-        $redis->del('clearstats:events', 'clearstats:events:processing', 'clearstats:events:dead-letter');
+        $redis->del('clearstats:events', 'clearstats:events:processing', 'clearstats:events:rejected');
         $queue = new EventQueue($redis);
         $redis->lPush('clearstats:events', '{malformed');
         $queue->push([
@@ -115,12 +115,36 @@ final class QueueWorkerTest extends TestCase
 
         try {
             $this->assertSame(1, (new QueueWorker($pdo, $queue))->processBatch(10));
-            $this->assertSame(1, (int) $redis->lLen('clearstats:events:dead-letter'));
+            $this->assertSame(1, $queue->rejectedCount());
             $this->assertSame(0, (int) $redis->lLen('clearstats:events:processing'));
             $this->assertSame('/after-poison', $pdo->query("SELECT url_path FROM events_raw WHERE site_id = 'after-poison-site'")->fetchColumn());
+
+            $record = json_decode((string) $redis->lIndex('clearstats:events:rejected', 0), true);
+            $this->assertArrayNotHasKey('payload', $record, 'The rejection log must not retain event bodies.');
+            $this->assertSame(hash('sha256', '{malformed'), $record['fingerprint']);
         } finally {
             $pdo->exec("DELETE FROM events_raw WHERE site_id = 'after-poison-site'");
-            $redis->del('clearstats:events', 'clearstats:events:processing', 'clearstats:events:dead-letter');
+            $redis->del('clearstats:events', 'clearstats:events:processing', 'clearstats:events:rejected');
         }
+    }
+
+    public function testConnectionFailuresAreRetryableButDataErrorsAreNot(): void
+    {
+        $isTransient = new \ReflectionMethod(QueueWorker::class, 'isTransient');
+        $worker = new QueueWorker(TestDatabase::create()->pdo(), new EventQueue(new \Redis()));
+
+        $deadlock = new \PDOException('deadlock');
+        $deadlock->errorInfo = [null, 1213, 'Deadlock found'];
+        $goneAway = new \PDOException('gone away');
+        $goneAway->errorInfo = [null, 2006, 'MySQL server has gone away'];
+        $connection = new \PDOException('connection');
+        (new \ReflectionProperty(\Exception::class, 'code'))->setValue($connection, '08S01');
+        $constraint = new \PDOException('constraint');
+        $constraint->errorInfo = [null, 1062, 'Duplicate entry'];
+
+        $this->assertTrue($isTransient->invoke($worker, $deadlock));
+        $this->assertTrue($isTransient->invoke($worker, $goneAway));
+        $this->assertTrue($isTransient->invoke($worker, $connection));
+        $this->assertFalse($isTransient->invoke($worker, $constraint));
     }
 }

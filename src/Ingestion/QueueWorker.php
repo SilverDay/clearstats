@@ -46,7 +46,7 @@ final class QueueWorker
             try {
                 $event = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
                 if (!is_array($event)) {
-                    throw new RuntimeException('Queued event must decode to an object.');
+                    throw new \UnexpectedValueException('Queued event must decode to an object.');
                 }
 
                 $insert->execute([
@@ -72,8 +72,17 @@ final class QueueWorker
                 ]);
                 $this->queue->acknowledge($payload);
                 $processed++;
+            } catch (\JsonException | \UnexpectedValueException $exception) {
+                $this->queue->discard($payload, $this->reasonFor($exception));
+            } catch (\PDOException $exception) {
+                if ($this->isTransient($exception)) {
+                    // Leave it reserved: recoverProcessing() requeues it next run.
+                    break;
+                }
+
+                $this->queue->discard($payload, $this->reasonFor($exception));
             } catch (\Throwable $exception) {
-                $this->queue->reject($payload, $exception->getMessage());
+                $this->queue->discard($payload, $this->reasonFor($exception));
             }
         }
 
@@ -83,6 +92,25 @@ final class QueueWorker
     private function nullableString(mixed $value): ?string
     {
         return $value === null || $value === '' ? null : (string) $value;
+    }
+
+    /** Connection loss and lock contention are retryable; a data error is not. */
+    private function isTransient(\PDOException $exception): bool
+    {
+        $sqlState = (string) $exception->getCode();
+        if (str_starts_with($sqlState, '08') || str_starts_with($sqlState, '40')) {
+            return true;
+        }
+
+        return in_array((int) ($exception->errorInfo[1] ?? 0), [1205, 1213, 2006, 2013], true);
+    }
+
+    /** Exception messages can embed SQL and bound values, so only the type and SQLSTATE are kept. */
+    private function reasonFor(\Throwable $exception): string
+    {
+        $sqlState = $exception instanceof \PDOException ? (string) $exception->getCode() : '';
+
+        return $sqlState === '' ? $exception::class : $exception::class . ' [' . $sqlState . ']';
     }
 
     private function createdAt(mixed $value): string

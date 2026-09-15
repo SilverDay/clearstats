@@ -45,18 +45,27 @@ An invalid payload threw and terminated the whole worker. The payload stayed in 
 processing list, and the next run's `recoverProcessing()` returned it to the queue —
 a poison-message loop.
 
-**Resolution.** `QueueWorker::processBatch()` now guards each event individually.
-`EventQueue::reject()` moves the payload to `clearstats:events:dead-letter` and
-acknowledges it, so it leaves the processing list permanently and later valid events
-still drain. The dead-letter record stores the payload and a reason string; it is not
-written to the application log, so analytics fields are not scattered into log files.
+**Resolution.** `QueueWorker::processBatch()` now guards each event individually and
+splits failures by whether a retry could ever succeed:
 
-**Test.** `QueueWorkerTest::testRejectsMalformedEventAndContinuesWithLaterValidEvent`
-pushes `{malformed` ahead of a valid event and asserts the valid one is still inserted,
-the dead-letter list has one entry, and the processing list is empty.
+- **Unprocessable** (undecodable JSON, non-object payload, or a data/constraint error):
+  the payload is dropped via `EventQueue::discard()`, which acknowledges it and appends a
+  **payload-free** record to `clearstats:events:rejected` — SHA-256 fingerprint, failure
+  type plus SQLSTATE, byte count, timestamp. The list is capped at 1000 entries.
+- **Transient** (connection loss, deadlock, lock-wait timeout — SQLSTATE `08*`/`40*` or
+  driver codes 1205/1213/2006/2013): the batch stops and the event stays reserved, so
+  `recoverProcessing()` requeues it on the next run instead of throwing valid data away.
 
-> **Operational note:** nothing drains `clearstats:events:dead-letter` yet. It will grow
-> unbounded under a sustained bad-payload source. Needs a retention or alerting decision.
+The event body is deliberately not retained. It would outlive
+`sites.raw_event_retention_days` and can carry operator-supplied values (`url_path`,
+campaign fields, `event_name`), so keeping it would move event data outside the
+documented retention model. Failure reasons record the exception class and SQLSTATE only,
+because driver messages can embed SQL and bound parameter values.
+
+**Tests.** `QueueWorkerTest::testRejectsMalformedEventAndContinuesWithLaterValidEvent`
+asserts the valid event still lands, the rejection log holds one entry, the processing
+list is empty, and the record contains a fingerprint but no `payload` key.
+`testConnectionFailuresAreRetryableButDataErrorsAreNot` pins the retry classification.
 
 ---
 
@@ -159,8 +168,11 @@ Still missing:
 
 ## Operational gap
 
-Nothing drains or inspects `clearstats:events:dead-letter`. It exists so a poison message
-leaves the processing list instead of stalling the worker, but it is currently a parking
-lot with no exit: no retention, no alerting, no requeue path. Under a sustained
-bad-payload source it grows unbounded in a Redis instance that is shared with skyggn.
-Needs a decision on retention and on whether operators get a way to inspect or replay it.
+`clearstats:events:rejected` is capped at 1000 entries and holds no event bodies, so it
+cannot grow unbounded in the Redis instance shared with skyggn and cannot outlive the
+retention model. `bin/queue-worker.php` reports `rejected=N` so a rising count is
+visible.
+
+What is still missing is alerting: nothing notices when that count climbs. A sustained
+bad-payload source would be silently discarded apart from the worker's stdout. Deciding
+where that signal should go — log, metric, or health endpoint — is still open.

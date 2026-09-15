@@ -44,8 +44,9 @@ $worker = new ClearStats\Ingestion\QueueWorker($database->pdo(), $queue);
 $processed = $worker->processBatch($limit);
 
 fwrite(STDOUT, sprintf(
-    "queue-worker.php: processed %d event(s); queued=%d processing=%d\n",
+    "queue-worker.php: processed %d event(s); queued=%d processing=%d rejected=%d\n",
     $processed,
     $queue->pendingCount(),
     $queue->processingCount(),
+    $queue->rejectedCount(),
 ));
