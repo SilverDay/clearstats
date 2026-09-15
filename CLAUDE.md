@@ -8,7 +8,8 @@ ClearStats (clearstats.de) is a self-hosted, multi-site, GDPR-compliant, cookiel
 
 ## Non-negotiable constraints
 
-- **No cookies. No client-side persistent storage** (no localStorage/sessionStorage identifiers). This is the core product promise — do not introduce either, even for "just" a UX convenience, without flagging it explicitly as a design change and stopping for confirmation.
+- **No cookies. No client-side persistent storage on the tracking surface** (no localStorage/sessionStorage identifiers). This is the core product promise for anything a tracked site's visitor loads — above all `public/js/track.js`. Do not introduce either there, even for "just" a UX convenience, without flagging it explicitly as a design change and stopping for confirmation. `tests/Tracking/TrackScriptTest.php` enforces this; do not weaken that test.
+- **Exception — first-party dashboard UI** (owner-approved, 2026-09-15): the authenticated/marketing pages served by ClearStats itself may persist *UI preferences* in `localStorage`. Currently only the theme choice (`clearstats-theme`, values `system`/`light`/`dark`). This is operator-facing chrome, not visitor tracking. The boundary: never store a visitor or session identifier, and never extend this to `track.js` or anything it loads.
 - **No raw IP or raw User-Agent is ever persisted to disk or DB.** They are valid inputs to the per-request visitor-hash computation (see below) and must be discarded immediately after. If you're about to write either to a table, a log file, or anywhere durable — stop and ask first. This is the load-bearing privacy control for the whole compliance posture; treat it as a hard boundary, not a style preference.
 - **Salt secrecy.** The daily HMAC salt (§3 of the spec) must never be logged, never exposed via any API response, never sent to any client script.
 
@@ -18,6 +19,9 @@ ClearStats (clearstats.de) is a self-hosted, multi-site, GDPR-compliant, cookiel
 - MariaDB 10.11+, PDO with prepared statements only — no raw string interpolation into SQL, ever.
 - No heavy framework. Front-controller routing (`public/index.php` dispatches to `src/`).
 - Server-rendered templates for the dashboard UI (no SPA framework).
+- **All page styling lives in `public/css/app-shell.css`** — one token-based stylesheet, shared primitives (`.btn`, `.card`, `.panel`, `.stat`, `.table`, `.grid`, `.form`). Templates must not ship local `<style>` blocks; they conflict with the tokens and force `!important` wars. Tokens follow `docs/design-system.md`.
+- Fonts are self-hosted in `public/fonts/` (Inter + JetBrains Mono, OFL-1.1). Never load fonts, icons, or scripts from a third-party CDN — it would disclose visitor IPs on every page load.
+- Files created under `public/` default to `rw-rw----` and Apache (`www-data`) then 403s them. `chmod 644` any new public asset (`chgrp` needs root).
 - Redis is used only for the inbound event queue (§5.3 of spec) — it's a shared instance also used by another project (skyggn) on the same host, so all ClearStats keys **must** be prefixed `clearstats:` and nothing else should assume exclusive access to the Redis instance.
 - Authentication baseline: NIST SP 800-63B.
 - Licensing: MIT for code (default), EUPL-1.2 considered as a European alternative if ever needed; non-code assets under CC BY-SA 4.0. See `REUSE.toml`. Follow REUSE spec conventions (SPDX headers in new files, `.license` sidecars where a header can't be embedded).
@@ -42,6 +46,9 @@ ClearStats (clearstats.de) is a self-hosted, multi-site, GDPR-compliant, cookiel
 | Event queue | Redis (shared with skyggn), namespaced `clearstats:*` |
 | DNT/GPC | Not honored — no user tracking occurs, so the signal doesn't apply |
 | DNT/GPC honoring | Explicitly rejected as a decision — do not add DNT/Sec-GPC handling |
+| Dashboard UI storage | `localStorage` allowed for UI preferences only (theme); never on the tracking surface |
+| Web fonts | Self-hosted WOFF2, not Google Fonts — avoids leaking visitor IPs |
+| UI styling | Single stylesheet (`public/css/app-shell.css`); no per-template `<style>` blocks |
 
 ## Open items (see spec §12 — do not resolve unilaterally, surface to the user)
 
