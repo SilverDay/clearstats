@@ -214,7 +214,11 @@ final class EventController
                 return null;
             }
 
-            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            try {
+                $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                return null;
+            }
             if (is_array($decoded)) {
                 return $decoded;
             }

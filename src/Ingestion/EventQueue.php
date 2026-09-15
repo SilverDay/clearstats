@@ -26,6 +26,7 @@ final class EventQueue
 {
     private const QUEUE_KEY = 'clearstats:events';
     private const PROCESSING_KEY = 'clearstats:events:processing';
+    private const DEAD_LETTER_KEY = 'clearstats:events:dead-letter';
 
     public function __construct(
         private readonly \Redis $redis,
@@ -58,6 +59,21 @@ final class EventQueue
         if ($removed === false) {
             throw new \RuntimeException('Failed to acknowledge queued event.');
         }
+    }
+
+    public function reject(string $payload, string $reason): void
+    {
+        $deadLetter = json_encode([
+            'payload' => $payload,
+            'reason' => $reason,
+            'rejected_at' => gmdate('c'),
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        $enqueued = $this->redis->lPush(self::DEAD_LETTER_KEY, $deadLetter);
+        if ($enqueued === false) {
+            throw new \RuntimeException('Failed to enqueue rejected event.');
+        }
+
+        $this->acknowledge($payload);
     }
 
     public function recoverProcessing(): int

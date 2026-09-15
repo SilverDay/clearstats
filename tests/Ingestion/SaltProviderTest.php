@@ -31,4 +31,18 @@ final class SaltProviderTest extends TestCase
 
         $this->assertSame('test-salt', $provider->currentSalt());
     }
+
+    public function testExpiredSaltRotationKeepsOneWinner(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, 'old-salt', NULL, '2020-01-01 00:00:00')");
+
+        $current = (new SaltProvider(null, $pdo, 24))->currentSalt();
+        $row = $pdo->query('SELECT current_salt, previous_salt FROM salt_state WHERE id = 1')->fetch();
+
+        $this->assertSame($current, $row['current_salt']);
+        $this->assertSame('old-salt', $row['previous_salt']);
+        $this->assertNotSame('old-salt', $current);
+    }
 }

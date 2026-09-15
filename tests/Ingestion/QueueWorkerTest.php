@@ -95,4 +95,32 @@ final class QueueWorkerTest extends TestCase
         $this->assertSame(0, (int) $redis->llen('clearstats:events:processing'));
         $redis->del('clearstats:events', 'clearstats:events:processing');
     }
+
+    public function testRejectsMalformedEventAndContinuesWithLaterValidEvent(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $redis = new \Redis();
+        $redis->connect('127.0.0.1', 6379);
+        $redis->del('clearstats:events', 'clearstats:events:processing', 'clearstats:events:dead-letter');
+        $queue = new EventQueue($redis);
+        $redis->lPush('clearstats:events', '{malformed');
+        $queue->push([
+            'site_id' => 'after-poison-site',
+            'visitor_hash' => str_repeat('b', 64),
+            'event_type' => 'pageview',
+            'url_path' => '/after-poison',
+            'created_at' => '2026-09-14T12:00:00Z',
+        ]);
+
+        try {
+            $this->assertSame(1, (new QueueWorker($pdo, $queue))->processBatch(10));
+            $this->assertSame(1, (int) $redis->lLen('clearstats:events:dead-letter'));
+            $this->assertSame(0, (int) $redis->lLen('clearstats:events:processing'));
+            $this->assertSame('/after-poison', $pdo->query("SELECT url_path FROM events_raw WHERE site_id = 'after-poison-site'")->fetchColumn());
+        } finally {
+            $pdo->exec("DELETE FROM events_raw WHERE site_id = 'after-poison-site'");
+            $redis->del('clearstats:events', 'clearstats:events:processing', 'clearstats:events:dead-letter');
+        }
+    }
 }

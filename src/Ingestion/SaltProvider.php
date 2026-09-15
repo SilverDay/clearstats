@@ -43,14 +43,18 @@ final class SaltProvider
         $row = $this->pdo->query('SELECT current_salt, generated_at FROM salt_state WHERE id = 1')->fetch();
         if (!is_array($row)) {
             $salt = bin2hex(random_bytes(32));
-            $statement = $this->pdo->prepare('INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, :current_salt, NULL, :generated_at)');
-            $statement->execute(['current_salt' => $salt, 'generated_at' => gmdate('Y-m-d H:i:s')]);
-            return $salt;
+            $generatedAt = gmdate('Y-m-d H:i:s');
+            $sql = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+                ? 'INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, :current_salt, NULL, :generated_at) ON CONFLICT(id) DO NOTHING'
+                : 'INSERT INTO salt_state (id, current_salt, previous_salt, generated_at) VALUES (1, :current_salt, NULL, :generated_at) ON DUPLICATE KEY UPDATE id = id';
+            $statement = $this->pdo->prepare($sql);
+            $statement->execute(['current_salt' => $salt, 'generated_at' => $generatedAt]);
+            $row = $this->pdo->query('SELECT current_salt, generated_at FROM salt_state WHERE id = 1')->fetch();
         }
 
         $generatedAt = new \DateTimeImmutable((string) $row['generated_at'], new \DateTimeZone('UTC'));
         if (time() - $generatedAt->getTimestamp() >= max(1, $this->rotationHours) * 3600) {
-            $this->rotate();
+            $this->rotateIfUnchanged((string) $row['generated_at']);
             $row = $this->pdo->query('SELECT current_salt FROM salt_state WHERE id = 1')->fetch();
         }
 
@@ -73,6 +77,18 @@ final class SaltProvider
         $statement->execute([
             'current_salt' => bin2hex(random_bytes(32)),
             'generated_at' => gmdate('Y-m-d H:i:s'),
+        ]);
+    }
+
+    private function rotateIfUnchanged(string $generatedAt): void
+    {
+        $statement = $this->pdo?->prepare(
+            'UPDATE salt_state SET previous_salt = current_salt, current_salt = :current_salt, generated_at = :new_generated_at WHERE id = 1 AND generated_at = :expected_generated_at',
+        );
+        $statement?->execute([
+            'current_salt' => bin2hex(random_bytes(32)),
+            'new_generated_at' => gmdate('Y-m-d H:i:s'),
+            'expected_generated_at' => $generatedAt,
         ]);
     }
 }

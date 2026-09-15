@@ -43,34 +43,38 @@ final class QueueWorker
                 break;
             }
 
-            $event = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($event)) {
-                throw new RuntimeException('Queued event must decode to an object.');
-            }
+            try {
+                $event = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+                if (!is_array($event)) {
+                    throw new RuntimeException('Queued event must decode to an object.');
+                }
 
-            $insert->execute([
-                'event_id' => (string) ($event['event_id'] ?? hash('sha256', $payload)),
-                'site_id' => (string) ($event['site_id'] ?? ''),
-                'session_id' => $this->nullableString($event['session_id'] ?? null),
-                'session_started_at' => $this->nullableString($event['session_started_at'] ?? null),
-                'visitor_hash' => (string) ($event['visitor_hash'] ?? ''),
-                'event_type' => (string) ($event['event_type'] ?? 'pageview'),
-                'event_name' => $this->nullableString($event['event_name'] ?? null),
-                'engagement_seconds' => max(0, min(86400, (int) ($event['engagement_seconds'] ?? 0))),
-                'url_path' => (string) ($event['url_path'] ?? '/'),
-                'campaign_source' => $this->nullableString($event['campaign_source'] ?? null),
-                'campaign_medium' => $this->nullableString($event['campaign_medium'] ?? null),
-                'campaign_name' => $this->nullableString($event['campaign_name'] ?? null),
-                'referrer_domain' => $this->nullableString($event['referrer_domain'] ?? null),
-                'country_code' => $this->nullableString($event['country_code'] ?? null),
-                'device_type' => (string) ($event['device_type'] ?? 'other'),
-                'browser' => $this->nullableString($event['browser'] ?? null),
-                'operating_system' => $this->nullableString($event['operating_system'] ?? null),
-                'language_code' => $this->nullableString($event['language_code'] ?? null),
-                'created_at' => $this->createdAt($event['created_at'] ?? null),
-            ]);
-            $this->queue->acknowledge($payload);
-            $processed++;
+                $insert->execute([
+                    'event_id' => (string) ($event['event_id'] ?? hash('sha256', $payload)),
+                    'site_id' => (string) ($event['site_id'] ?? ''),
+                    'session_id' => $this->nullableString($event['session_id'] ?? null),
+                    'session_started_at' => $this->nullableString($event['session_started_at'] ?? null),
+                    'visitor_hash' => (string) ($event['visitor_hash'] ?? ''),
+                    'event_type' => (string) ($event['event_type'] ?? 'pageview'),
+                    'event_name' => $this->nullableString($event['event_name'] ?? null),
+                    'engagement_seconds' => max(0, min(86400, (int) ($event['engagement_seconds'] ?? 0))),
+                    'url_path' => (string) ($event['url_path'] ?? '/'),
+                    'campaign_source' => $this->nullableString($event['campaign_source'] ?? null),
+                    'campaign_medium' => $this->nullableString($event['campaign_medium'] ?? null),
+                    'campaign_name' => $this->nullableString($event['campaign_name'] ?? null),
+                    'referrer_domain' => $this->nullableString($event['referrer_domain'] ?? null),
+                    'country_code' => $this->nullableString($event['country_code'] ?? null),
+                    'device_type' => (string) ($event['device_type'] ?? 'other'),
+                    'browser' => $this->nullableString($event['browser'] ?? null),
+                    'operating_system' => $this->nullableString($event['operating_system'] ?? null),
+                    'language_code' => $this->nullableString($event['language_code'] ?? null),
+                    'created_at' => $this->createdAt($event['created_at'] ?? null),
+                ]);
+                $this->queue->acknowledge($payload);
+                $processed++;
+            } catch (\Throwable $exception) {
+                $this->queue->reject($payload, $exception->getMessage());
+            }
         }
 
         return $processed;
