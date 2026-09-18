@@ -58,6 +58,53 @@ final class DashboardQueryTest extends TestCase
         $this->assertSame('desktop', $devices[0]['device_type']);
     }
 
+    public function testTopPagesReturnsVisitorsAndBounceRateSummedAcrossARange(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM daily_page_stats WHERE site_id = 'range-site'");
+        $pdo->exec("INSERT INTO daily_page_stats (site_id, date, url_path, pageviews, visitors, entrances, bounces) VALUES
+            ('range-site', '2026-09-13', '/home', 10, 8, 6, 2),
+            ('range-site', '2026-09-14', '/home', 15, 12, 9, 3)");
+
+        $query = new DashboardQuery($database);
+        $rows = $query->topPages('range-site', '2026-09-14', 5, '2026-09-13');
+
+        $this->assertSame('/home', $rows[0]['url_path']);
+        $this->assertSame(25, $rows[0]['pageviews']);
+        $this->assertSame(20, $rows[0]['visitors']);
+        $this->assertSame(15, $rows[0]['entrances']);
+        $this->assertSame(5, $rows[0]['bounces']);
+        $this->assertSame(33.3, $rows[0]['bounce_rate']);
+
+        $pdo->exec("DELETE FROM daily_page_stats WHERE site_id = 'range-site'");
+    }
+
+    public function testOverviewSumsAcrossACustomDateRange(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM daily_site_stats WHERE site_id = 'range-overview'");
+        $pdo->exec("INSERT INTO daily_site_stats (site_id, date, pageviews, unique_visitor_hashes_count, sessions, bounces, avg_engagement_seconds) VALUES
+            ('range-overview', '2026-09-12', 10, 4, 5, 2, 20),
+            ('range-overview', '2026-09-13', 20, 8, 5, 1, 40),
+            ('range-overview', '2026-09-14', 5, 2, 0, 0, 0)");
+
+        $query = new DashboardQuery($database);
+
+        // Only the first two days requested — the third day must not be included.
+        $overview = $query->overview('range-overview', '2026-09-13', '2026-09-12');
+
+        $this->assertSame(30, $overview['pageviews']);
+        $this->assertSame(12, $overview['unique_visitor_hashes_count']);
+        $this->assertSame(10, $overview['sessions']);
+        $this->assertSame(3, $overview['bounces']);
+        $this->assertSame(30, $overview['avg_engagement_seconds']);
+        $this->assertSame(30.0, $overview['bounce_rate']);
+
+        $pdo->exec("DELETE FROM daily_site_stats WHERE site_id = 'range-overview'");
+    }
+
     public function testLoadsPortfolioOverviewAcrossAssignedSites(): void
     {
         $database = TestDatabase::create();

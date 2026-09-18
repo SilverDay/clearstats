@@ -417,10 +417,19 @@ pre {
     gap: var(--space-md);
 }
 
-/* Wide content beside a narrower companion column. */
+/* Dashboard stat-tile row — same vertical rhythm as .stack's row gap below it,
+   which only applies gap *between* its own children, not above itself. */
+.stat-grid {
+    margin-bottom: var(--space-lg);
+}
+
+/* Wide content beside a narrower companion column. Grid's default stretch
+   keeps both cards the same height; .card-chart below makes sure the taller
+   card's chart actually grows to use that height instead of leaving it as
+   dead space beneath a fixed-size chart. */
 .grid-split {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(300px, .6fr);
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr);
     gap: var(--space-lg);
 }
 
@@ -686,6 +695,56 @@ pre {
     text-align: left;
 }
 
+/* Long values (a full URL path, a source/medium/campaign triple) clip with
+   an ellipsis instead of forcing the table wider than its card. A max-width
+   on this span is not enough by itself: table auto-layout sizes columns
+   from each cell's unconstrained content width, so a nowrap span still
+   forces the column (and the whole table, triggering .table-wrap's
+   scrollbar) wider unless the cell itself has a fixed width — see
+   .table-fixed below, which this pairs with on the Top pages table. Full
+   value is still available via the title attribute / on hover. */
+.table-truncate {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Opt-in modifier (not the default .table behavior — the Users table etc.
+   still want auto column sizing) for a table in a narrow column where a
+   long first-column value must not push the table wider than its card.
+   overflow-wrap is the actual guarantee against that: a fixed cell width
+   only stops the table's own box from growing — a single unbreakable word
+   (a header label, say) still overflows into the next cell visually, and
+   that overflow still counts toward .table-wrap's scrollable area even
+   though the table itself never got wider. Letting it break stops that. */
+.table-fixed {
+    table-layout: fixed;
+}
+
+.table-fixed th,
+.table-fixed td {
+    overflow-wrap: anywhere;
+}
+
+.table-fixed th:first-child,
+.table-fixed td:first-child {
+    width: 38%;
+}
+
+.table-fixed th:not(:first-child),
+.table-fixed td:not(:first-child) {
+    width: 19%;
+}
+
+/* "Visitors" is the longest header word in this row — a few more points
+   than its "Views"/"Bounce" neighbors keeps it on one line. */
+.table-fixed th:nth-child(3),
+.table-fixed td:nth-child(3) {
+    width: 24%;
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
@@ -713,16 +772,26 @@ pre {
     color: var(--color-success);
 }
 
+/* Lets .chart below grow to use the full height the grid gives this card
+   (matching its stretched row companion) instead of a fixed height leaving
+   unused space under it. */
+.card-chart {
+    display: flex;
+    flex-direction: column;
+}
+
 .chart {
     display: flex;
     align-items: flex-end;
     gap: var(--space-sm);
-    height: 180px;
-    padding-top: var(--space-md);
+    flex: 1;
+    min-height: 180px;
+    padding-top: var(--space-xl);
     border-bottom: 1px solid var(--color-border);
 }
 
 .chart-bar {
+    position: relative;
     flex: 1;
     min-height: 4px;
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
@@ -734,12 +803,79 @@ pre {
     opacity: .75;
 }
 
+/* Anchored to the bar's own top edge (not the chart container's), so it
+   tracks the bar regardless of how tall that bar is. */
+.chart-bar-value {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: var(--space-xs);
+    color: var(--color-muted-foreground);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.chart-axis {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
+.chart-axis-label {
+    flex: 1;
+    overflow: hidden;
+    color: var(--color-muted-foreground);
+    font-size: 11px;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .chart-empty {
     display: flex;
+    flex: 1;
     align-items: center;
-    height: 180px;
+    justify-content: center;
+    min-height: 180px;
     color: var(--color-muted-foreground);
     font-size: 14px;
+}
+
+/* Row of date-range presets + custom-range form above the stat tiles. */
+.range-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xl);
+    padding: var(--space-sm);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.range-picker-custom {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding-left: var(--space-xs);
+    border-left: 1px solid var(--color-border);
+}
+
+.range-picker-custom input[type="date"] {
+    width: auto;
+    height: 36px;
+    padding: 0 8px;
+    font-size: 13px;
+}
+
+.range-picker-sep {
+    color: var(--color-muted-foreground);
+    font-size: 13px;
 }
 
 /* Row entry reused by the site list. */
@@ -835,6 +971,7 @@ input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="number"],
+input[type="date"],
 select,
 textarea {
     width: 100%;

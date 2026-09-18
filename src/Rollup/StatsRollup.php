@@ -81,25 +81,69 @@ final class StatsRollup
             'date' => $date,
         ]);
 
+        // event_type = 'pageview' matters here: events_raw also carries 'custom' and
+        // 'session_end' rows against the same url_path, which would otherwise inflate
+        // the pageview count for that page.
         $pageStats = $pdo->prepare(
-            'SELECT url_path, COUNT(*) AS pageviews
+            'SELECT url_path, COUNT(*) AS pageviews, COUNT(DISTINCT visitor_hash) AS visitors
              FROM events_raw
-             WHERE site_id = :site_id AND DATE(created_at) = :date
+             WHERE site_id = :site_id AND DATE(created_at) = :date AND event_type = \'pageview\'
              GROUP BY url_path'
         );
         $pageStats->execute(['site_id' => $siteId, 'date' => $date]);
 
+        $pageRows = [];
         while (($row = $pageStats->fetch()) !== false) {
+            $pageRows[(string) $row['url_path']] = [
+                'pageviews' => (int) $row['pageviews'],
+                'visitors' => (int) $row['visitors'],
+                'entrances' => 0,
+                'bounces' => 0,
+            ];
+        }
+
+        // Entrances/bounces are attributed to the first pageview of each session
+        // (rn = 1), not every page a session touched, matching how the dashboard
+        // reports a page's own bounce rate rather than the site's.
+        $entryStats = $pdo->prepare(
+            'SELECT entry_url_path, COUNT(*) AS entrances,
+                    SUM(CASE WHEN total_pageviews = 1 THEN 1 ELSE 0 END) AS bounces
+             FROM (
+                 SELECT url_path AS entry_url_path, total_pageviews
+                 FROM (
+                     SELECT url_path,
+                            ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY created_at, id) AS rn,
+                            COUNT(*) OVER (PARTITION BY session_id) AS total_pageviews
+                     FROM events_raw
+                     WHERE site_id = :site_id AND DATE(created_at) = :date
+                       AND event_type = \'pageview\' AND session_id IS NOT NULL
+                 ) ranked
+                 WHERE rn = 1
+             ) entries
+             GROUP BY entry_url_path',
+        );
+        $entryStats->execute(['site_id' => $siteId, 'date' => $date]);
+        while (($row = $entryStats->fetch()) !== false) {
+            $urlPath = (string) $row['entry_url_path'];
+            $pageRows[$urlPath] ??= ['pageviews' => 0, 'visitors' => 0, 'entrances' => 0, 'bounces' => 0];
+            $pageRows[$urlPath]['entrances'] = (int) $row['entrances'];
+            $pageRows[$urlPath]['bounces'] = (int) $row['bounces'];
+        }
+
+        foreach ($pageRows as $urlPath => $stats) {
             $upsertPage = $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'sqlite'
-                ? 'INSERT INTO daily_page_stats (site_id, date, url_path, pageviews) VALUES (:site_id, :date, :url_path, :pageviews) ON CONFLICT(site_id, date, url_path) DO UPDATE SET pageviews = excluded.pageviews'
-                : 'INSERT INTO daily_page_stats (site_id, date, url_path, pageviews)
-                 VALUES (:site_id, :date, :url_path, :pageviews)
-                  ON DUPLICATE KEY UPDATE pageviews = VALUES(pageviews)';
+                ? 'INSERT INTO daily_page_stats (site_id, date, url_path, pageviews, visitors, entrances, bounces) VALUES (:site_id, :date, :url_path, :pageviews, :visitors, :entrances, :bounces) ON CONFLICT(site_id, date, url_path) DO UPDATE SET pageviews = excluded.pageviews, visitors = excluded.visitors, entrances = excluded.entrances, bounces = excluded.bounces'
+                : 'INSERT INTO daily_page_stats (site_id, date, url_path, pageviews, visitors, entrances, bounces)
+                 VALUES (:site_id, :date, :url_path, :pageviews, :visitors, :entrances, :bounces)
+                  ON DUPLICATE KEY UPDATE pageviews = VALUES(pageviews), visitors = VALUES(visitors), entrances = VALUES(entrances), bounces = VALUES(bounces)';
             $pdo->prepare($upsertPage)->execute([
                 'site_id' => $siteId,
                 'date' => $date,
-                'url_path' => (string) $row['url_path'],
-                'pageviews' => (int) $row['pageviews'],
+                'url_path' => $urlPath,
+                'pageviews' => $stats['pageviews'],
+                'visitors' => $stats['visitors'],
+                'entrances' => $stats['entrances'],
+                'bounces' => $stats['bounces'],
             ]);
         }
 

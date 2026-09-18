@@ -164,7 +164,7 @@ No IP, no raw UA, no visitor identifier that persists beyond 24h relevance (the 
 ### 6.2 Rollup tables (long-term retention)
 Pre-aggregated, indexed for dashboard query performance:
 - `daily_site_stats` (site_id, date, pageviews, unique_visitor_hashes_count, bounce_rate)
-- `daily_page_stats` (site_id, date, url_path, pageviews)
+- `daily_page_stats` (site_id, date, url_path, pageviews, visitors, entrances, bounces) — `entrances`/`bounces` are attributed to the page a session *started* on, not every page it viewed, so the dashboard's per-page bounce rate (`bounces / entrances`) means the same thing as a landing-page bounce rate elsewhere
 - `daily_referrer_stats` (site_id, date, referrer_domain, visits)
 - `daily_country_stats` (site_id, date, country_code, visits)
 - `daily_device_stats` (site_id, date, device_type, visits)

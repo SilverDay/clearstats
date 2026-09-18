@@ -223,7 +223,7 @@ if ($isHtmlRoute) {
 JS;
 
     $assets = '<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>'
-        . '<link rel="stylesheet" href="/css/app-shell.css?v=6">'
+        . '<link rel="stylesheet" href="/css/app-shell.css?v=9">'
         . $themeBoot
         . '<script defer src="/js/theme.js?v=5"></script>';
 

@@ -98,6 +98,14 @@ CREATE TABLE IF NOT EXISTS daily_page_stats (
     pageviews INT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (site_id, date, url_path(255))
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+-- Per-page visitor/bounce detail for the Top Pages dashboard breakdown.
+-- entrances/bounces are keyed to the page a session STARTED on, not every page
+-- it viewed, so bounce_rate = bounces / entrances mirrors how Plausible/GA
+-- attribute bounces to the landing page rather than every page visited.
+ALTER TABLE daily_page_stats
+ADD COLUMN IF NOT EXISTS visitors INT UNSIGNED NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS entrances INT UNSIGNED NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS bounces INT UNSIGNED NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS daily_referrer_stats (
     site_id VARCHAR(32) NOT NULL,
     date DATE NOT NULL,

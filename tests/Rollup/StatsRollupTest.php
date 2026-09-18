@@ -51,6 +51,46 @@ final class StatsRollupTest extends TestCase
         $this->assertSame('1', (string) $deviceRow['visits']);
     }
 
+    public function testAggregatesPerPageVisitorsEntrancesAndBounces(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM events_raw WHERE site_id = 'page-detail-site'");
+        $pdo->exec("DELETE FROM daily_page_stats WHERE site_id = 'page-detail-site'");
+
+        $insert = $pdo->prepare('INSERT INTO events_raw (site_id, session_id, visitor_hash, event_type, url_path, created_at) VALUES (:site_id, :session_id, :visitor_hash, :event_type, :url_path, :created_at)');
+        $base = ['site_id' => 'page-detail-site'];
+        // Session "a" lands on /home and bounces (single pageview).
+        $insert->execute($base + ['session_id' => 'a', 'visitor_hash' => str_repeat('1', 64), 'event_type' => 'pageview', 'url_path' => '/home', 'created_at' => '2026-09-14 10:00:00']);
+        // Session "b" lands on /home, then continues to /pricing (not a bounce for /home).
+        $insert->execute($base + ['session_id' => 'b', 'visitor_hash' => str_repeat('2', 64), 'event_type' => 'pageview', 'url_path' => '/home', 'created_at' => '2026-09-14 10:05:00']);
+        $insert->execute($base + ['session_id' => 'b', 'visitor_hash' => str_repeat('2', 64), 'event_type' => 'pageview', 'url_path' => '/pricing', 'created_at' => '2026-09-14 10:06:00']);
+        // Session "c" lands directly on /pricing and bounces.
+        $insert->execute($base + ['session_id' => 'c', 'visitor_hash' => str_repeat('3', 64), 'event_type' => 'pageview', 'url_path' => '/pricing', 'created_at' => '2026-09-14 10:10:00']);
+        // A non-pageview event against /home must not inflate its pageview count.
+        $insert->execute($base + ['session_id' => 'a', 'visitor_hash' => str_repeat('1', 64), 'event_type' => 'session_end', 'url_path' => '/home', 'created_at' => '2026-09-14 10:01:00']);
+
+        try {
+            (new StatsRollup($database))->aggregateDay('page-detail-site', '2026-09-14');
+
+            $home = $pdo->query("SELECT pageviews, visitors, entrances, bounces FROM daily_page_stats WHERE site_id = 'page-detail-site' AND url_path = '/home'")->fetch();
+            $pricing = $pdo->query("SELECT pageviews, visitors, entrances, bounces FROM daily_page_stats WHERE site_id = 'page-detail-site' AND url_path = '/pricing'")->fetch();
+
+            $this->assertSame('2', (string) $home['pageviews']);
+            $this->assertSame('2', (string) $home['visitors']);
+            $this->assertSame('2', (string) $home['entrances']);
+            $this->assertSame('1', (string) $home['bounces']);
+
+            $this->assertSame('2', (string) $pricing['pageviews']);
+            $this->assertSame('2', (string) $pricing['visitors']);
+            $this->assertSame('1', (string) $pricing['entrances']);
+            $this->assertSame('1', (string) $pricing['bounces']);
+        } finally {
+            $pdo->exec("DELETE FROM events_raw WHERE site_id = 'page-detail-site'");
+            $pdo->exec("DELETE FROM daily_page_stats WHERE site_id = 'page-detail-site'");
+        }
+    }
+
     public function testPurgesRawEventsUsingEachSitesRetentionPolicy(): void
     {
         $database = TestDatabase::create();

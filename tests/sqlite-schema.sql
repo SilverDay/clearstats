@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS daily_page_stats (
     date TEXT NOT NULL,
     url_path TEXT NOT NULL,
     pageviews INTEGER NOT NULL DEFAULT 0,
+    visitors INTEGER NOT NULL DEFAULT 0,
+    entrances INTEGER NOT NULL DEFAULT 0,
+    bounces INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (site_id, date, url_path)
 );
 CREATE TABLE IF NOT EXISTS daily_referrer_stats (

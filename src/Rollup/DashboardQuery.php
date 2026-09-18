@@ -18,38 +18,48 @@ final class DashboardQuery
     /**
      * @return array{pageviews: int, unique_visitor_hashes_count: int, sessions: int, bounces: int, avg_engagement_seconds: int, bounce_rate: float|null}
      */
-    public function overview(string $siteId, string $date): array
+    public function overview(string $siteId, string $endDate, ?string $startDate = null): array
     {
+        $startDate ??= $endDate;
         $pdo = $this->database->pdo();
         $stmt = $pdo->prepare(
-            'SELECT pageviews, unique_visitor_hashes_count, sessions, bounces, avg_engagement_seconds, bounce_rate
+            'SELECT COALESCE(SUM(pageviews), 0) AS pageviews,
+                    COALESCE(SUM(unique_visitor_hashes_count), 0) AS unique_visitor_hashes_count,
+                    COALESCE(SUM(sessions), 0) AS sessions,
+                    COALESCE(SUM(bounces), 0) AS bounces,
+                    COALESCE(SUM(avg_engagement_seconds * sessions), 0) AS engagement_total
              FROM daily_site_stats
-             WHERE site_id = :site_id AND date = :date'
+             WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date'
         );
-        $stmt->execute(['site_id' => $siteId, 'date' => $date]);
+        $stmt->execute(['site_id' => $siteId, 'start_date' => $startDate, 'end_date' => $endDate]);
 
-        $row = $stmt->fetch();
-        if ($row === false) {
-            return ['pageviews' => 0, 'unique_visitor_hashes_count' => 0, 'sessions' => 0, 'bounces' => 0, 'avg_engagement_seconds' => 0, 'bounce_rate' => null];
-        }
+        $row = $stmt->fetch() ?: [];
+        $sessions = (int) ($row['sessions'] ?? 0);
+        $bounces = (int) ($row['bounces'] ?? 0);
 
         return [
-            'pageviews' => (int) $row['pageviews'],
-            'unique_visitor_hashes_count' => (int) $row['unique_visitor_hashes_count'],
-            'sessions' => (int) $row['sessions'],
-            'bounces' => (int) $row['bounces'],
-            'avg_engagement_seconds' => (int) $row['avg_engagement_seconds'],
-            'bounce_rate' => $row['bounce_rate'] === null ? null : (float) $row['bounce_rate'],
+            'pageviews' => (int) ($row['pageviews'] ?? 0),
+            // Sum of each day's distinct-visitor count, not a true distinct count
+            // across the whole range — a visitor seen on two days in the range is
+            // counted twice. Rollup tables never store the underlying hash set, so
+            // an exact cross-day distinct count isn't available. Same approximation
+            // portfolioOverview() already makes when summing across sites.
+            'unique_visitor_hashes_count' => (int) ($row['unique_visitor_hashes_count'] ?? 0),
+            'sessions' => $sessions,
+            'bounces' => $bounces,
+            'avg_engagement_seconds' => $sessions > 0 ? (int) round(((int) ($row['engagement_total'] ?? 0)) / $sessions) : 0,
+            'bounce_rate' => $sessions > 0 ? ($bounces / $sessions) * 100 : null,
         ];
     }
 
     /** @param list<string> $siteIds */
-    public function portfolioOverview(array $siteIds, string $date): array
+    public function portfolioOverview(array $siteIds, string $endDate, ?string $startDate = null): array
     {
         if ($siteIds === []) return ['pageviews' => 0, 'unique_visitor_hashes_count' => 0, 'sessions' => 0, 'bounces' => 0, 'avg_engagement_seconds' => 0, 'bounce_rate' => null];
-        $params = ['date' => $date];
+        $startDate ??= $endDate;
+        $params = ['start_date' => $startDate, 'end_date' => $endDate];
         $in = $this->inClause($siteIds, $params, 'site');
-        $statement = $this->database->pdo()->prepare("SELECT COALESCE(SUM(pageviews),0) pageviews, COALESCE(SUM(unique_visitor_hashes_count),0) unique_visitor_hashes_count, COALESCE(SUM(sessions),0) sessions, COALESCE(SUM(bounces),0) bounces, COALESCE(SUM(avg_engagement_seconds * sessions),0) engagement_total FROM daily_site_stats WHERE date = :date AND site_id IN ({$in})");
+        $statement = $this->database->pdo()->prepare("SELECT COALESCE(SUM(pageviews),0) pageviews, COALESCE(SUM(unique_visitor_hashes_count),0) unique_visitor_hashes_count, COALESCE(SUM(sessions),0) sessions, COALESCE(SUM(bounces),0) bounces, COALESCE(SUM(avg_engagement_seconds * sessions),0) engagement_total FROM daily_site_stats WHERE date BETWEEN :start_date AND :end_date AND site_id IN ({$in})");
         $statement->execute($params);
         $row = $statement->fetch() ?: [];
         $sessions = (int) ($row['sessions'] ?? 0);
@@ -69,47 +79,95 @@ final class DashboardQuery
         return array_map(static fn(array $row): array => ['date' => (string) $row['date'], 'pageviews' => (int) $row['pageviews']], $statement->fetchAll());
     }
 
-    /** @param list<string> $siteIds */
-    public function portfolioTopPages(array $siteIds, string $date, int $limit = 10): array
+    /**
+     * @param list<string> $siteIds
+     * @return list<array{url_path: string, pageviews: int, visitors: int, bounce_rate: float|null}>
+     */
+    public function portfolioTopPages(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
     {
-        return $this->portfolioDimensionRows('daily_page_stats', 'url_path', 'pageviews', 'url_path', 'pageviews', $siteIds, $date, $limit);
-    }
-
-    /** @param list<string> $siteIds */
-    public function portfolioTopReferrers(array $siteIds, string $date, int $limit = 10): array
-    {
-        return $this->portfolioDimensionRows('daily_referrer_stats', 'referrer_domain', 'visits', 'referrer_domain', 'visits', $siteIds, $date, $limit);
-    }
-
-    /** @param list<string> $siteIds */
-    public function portfolioTopCountries(array $siteIds, string $date, int $limit = 10): array
-    {
-        return $this->portfolioDimensionRows('daily_country_stats', 'country_code', 'visits', 'country_code', 'visits', $siteIds, $date, $limit);
-    }
-
-    /** @param list<string> $siteIds */
-    public function portfolioDevices(array $siteIds, string $date): array
-    {
-        return $this->portfolioDimensionRows('daily_device_stats', 'device_type', 'visits', 'device_type', 'visits', $siteIds, $date, 100);
-    }
-
-    /** @param list<string> $siteIds */
-    public function portfolioOperatingSystems(array $siteIds, string $date): array
-    {
-        return $this->portfolioDimensionRows('daily_os_stats', 'operating_system', 'visits', 'operating_system', 'visits', $siteIds, $date, 20);
-    }
-
-    /** @param list<string> $siteIds */
-    public function portfolioLanguages(array $siteIds, string $date): array
-    {
-        return $this->portfolioDimensionRows('daily_language_stats', 'language_code', 'visits', 'language_code', 'visits', $siteIds, $date, 20);
-    }
-
-    private function portfolioDimensionRows(string $table, string $column, string $countColumn, string $outputColumn, string $outputCount, array $siteIds, string $date, int $limit): array
-    {
-        $params = ['date' => $date];
+        if ($siteIds === []) return [];
+        $startDate ??= $endDate;
+        $params = ['start_date' => $startDate, 'end_date' => $endDate];
         $in = $this->inClause($siteIds, $params, 'site');
-        $statement = $this->database->pdo()->prepare("SELECT {$column} value, SUM({$countColumn}) count_value FROM {$table} WHERE date = :date AND site_id IN ({$in}) GROUP BY {$column} ORDER BY count_value DESC, {$column} ASC LIMIT :limit");
+        $statement = $this->database->pdo()->prepare(
+            "SELECT url_path, SUM(pageviews) AS pageviews, SUM(visitors) AS visitors, SUM(entrances) AS entrances, SUM(bounces) AS bounces
+             FROM daily_page_stats
+             WHERE date BETWEEN :start_date AND :end_date AND site_id IN ({$in})
+             GROUP BY url_path
+             ORDER BY pageviews DESC, url_path ASC
+             LIMIT :limit",
+        );
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        foreach ($params as $key => $value) $statement->bindValue(':' . $key, $value, \PDO::PARAM_STR);
+        $statement->execute();
+
+        return array_map($this->mapPageRow(...), $statement->fetchAll());
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioTopReferrers(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_referrer_stats', 'referrer_domain', 'visits', 'referrer_domain', 'visits', $siteIds, $endDate, $limit, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioTopCountries(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_country_stats', 'country_code', 'visits', 'country_code', 'visits', $siteIds, $endDate, $limit, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioDevices(array $siteIds, string $endDate, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_device_stats', 'device_type', 'visits', 'device_type', 'visits', $siteIds, $endDate, 100, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioOperatingSystems(array $siteIds, string $endDate, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_os_stats', 'operating_system', 'visits', 'operating_system', 'visits', $siteIds, $endDate, 20, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioLanguages(array $siteIds, string $endDate, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_language_stats', 'language_code', 'visits', 'language_code', 'visits', $siteIds, $endDate, 20, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioTopEvents(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_event_stats', 'event_name', 'events', 'event_name', 'events', $siteIds, $endDate, $limit, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioCampaigns(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        if ($siteIds === []) return [];
+        $startDate ??= $endDate;
+        $params = ['start_date' => $startDate, 'end_date' => $endDate];
+        $in = $this->inClause($siteIds, $params, 'site');
+        $statement = $this->database->pdo()->prepare(
+            "SELECT campaign_source, campaign_medium, campaign_name, SUM(visits) AS visits
+             FROM daily_campaign_stats
+             WHERE date BETWEEN :start_date AND :end_date AND site_id IN ({$in})
+             GROUP BY campaign_source, campaign_medium, campaign_name
+             ORDER BY visits DESC, campaign_source ASC
+             LIMIT :limit",
+        );
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        foreach ($params as $key => $value) $statement->bindValue(':' . $key, $value, \PDO::PARAM_STR);
+        $statement->execute();
+
+        return $statement->fetchAll();
+    }
+
+    private function portfolioDimensionRows(string $table, string $column, string $countColumn, string $outputColumn, string $outputCount, array $siteIds, string $endDate, int $limit, ?string $startDate = null): array
+    {
+        $startDate ??= $endDate;
+        $params = ['start_date' => $startDate, 'end_date' => $endDate];
+        $in = $this->inClause($siteIds, $params, 'site');
+        $statement = $this->database->pdo()->prepare("SELECT {$column} value, SUM({$countColumn}) count_value FROM {$table} WHERE date BETWEEN :start_date AND :end_date AND site_id IN ({$in}) GROUP BY {$column} ORDER BY count_value DESC, {$column} ASC LIMIT :limit");
         $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
         foreach ($params as $key => $value) $statement->bindValue(':' . $key, $value, \PDO::PARAM_STR);
         $statement->execute();
@@ -153,91 +211,108 @@ final class DashboardQuery
     }
 
     /**
-     * @return list<array{url_path: string, pageviews: int}>
+     * @return list<array{url_path: string, pageviews: int, visitors: int, entrances: int, bounces: int, bounce_rate: float|null}>
      */
-    public function topPages(string $siteId, string $date, int $limit = 10): array
+    public function topPages(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
     {
+        $startDate ??= $endDate;
         $pdo = $this->database->pdo();
         $stmt = $pdo->prepare(
-            'SELECT url_path, pageviews
+            'SELECT url_path, SUM(pageviews) AS pageviews, SUM(visitors) AS visitors, SUM(entrances) AS entrances, SUM(bounces) AS bounces
              FROM daily_page_stats
-             WHERE site_id = :site_id AND date = :date
+             WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date
+             GROUP BY url_path
              ORDER BY pageviews DESC, url_path ASC
              LIMIT :limit'
         );
 
         $stmt->bindValue(':site_id', $siteId, \PDO::PARAM_STR);
-        $stmt->bindValue(':date', $date, \PDO::PARAM_STR);
-        $stmt->bindValue(':limit', $limit, \PDO::PARAM_INT);
+        $stmt->bindValue(':start_date', $startDate, \PDO::PARAM_STR);
+        $stmt->bindValue(':end_date', $endDate, \PDO::PARAM_STR);
+        $stmt->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
         $stmt->execute();
 
-        $rows = $stmt->fetchAll();
-        $result = [];
-        foreach ($rows as $row) {
-            $result[] = [
-                'url_path' => (string) $row['url_path'],
-                'pageviews' => (int) $row['pageviews'],
-            ];
-        }
+        return array_map($this->mapPageRow(...), $stmt->fetchAll());
+    }
 
-        return $result;
+    /**
+     * @param array<string, int|string> $row
+     * @return array{url_path: string, pageviews: int, visitors: int, entrances: int, bounces: int, bounce_rate: float|null}
+     */
+    private function mapPageRow(array $row): array
+    {
+        $entrances = (int) ($row['entrances'] ?? 0);
+        $bounces = (int) ($row['bounces'] ?? 0);
+
+        return [
+            'url_path' => (string) $row['url_path'],
+            'pageviews' => (int) $row['pageviews'],
+            'visitors' => (int) ($row['visitors'] ?? 0),
+            'entrances' => $entrances,
+            'bounces' => $bounces,
+            'bounce_rate' => $entrances > 0 ? round(($bounces / $entrances) * 100, 1) : null,
+        ];
     }
 
     /**
      * @return list<array{referrer_domain: string, visits: int}>
      */
-    public function topReferrers(string $siteId, string $date, int $limit = 10): array
+    public function topReferrers(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
     {
-        return $this->dimensionRows('daily_referrer_stats', 'referrer_domain', 'referrer_domain', $siteId, $date, $limit);
+        return $this->dimensionRows('daily_referrer_stats', 'referrer_domain', 'referrer_domain', $siteId, $endDate, $limit, $startDate);
     }
 
     /**
      * @return list<array{country_code: string, visits: int}>
      */
-    public function topCountries(string $siteId, string $date, int $limit = 10): array
+    public function topCountries(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
     {
-        return $this->dimensionRows('daily_country_stats', 'country_code', 'country_code', $siteId, $date, $limit);
+        return $this->dimensionRows('daily_country_stats', 'country_code', 'country_code', $siteId, $endDate, $limit, $startDate);
     }
 
     /**
      * @return list<array{device_type: string, visits: int}>
      */
-    public function devices(string $siteId, string $date): array
+    public function devices(string $siteId, string $endDate, ?string $startDate = null): array
     {
-        return $this->dimensionRows('daily_device_stats', 'device_type', 'device_type', $siteId, $date, 100);
+        return $this->dimensionRows('daily_device_stats', 'device_type', 'device_type', $siteId, $endDate, 100, $startDate);
     }
 
-    public function operatingSystems(string $siteId, string $date): array
+    public function operatingSystems(string $siteId, string $endDate, ?string $startDate = null): array
     {
-        return $this->dimensionRows('daily_os_stats', 'operating_system', 'operating_system', $siteId, $date, 20);
+        return $this->dimensionRows('daily_os_stats', 'operating_system', 'operating_system', $siteId, $endDate, 20, $startDate);
     }
 
-    public function languages(string $siteId, string $date): array
+    public function languages(string $siteId, string $endDate, ?string $startDate = null): array
     {
-        return $this->dimensionRows('daily_language_stats', 'language_code', 'language_code', $siteId, $date, 20);
+        return $this->dimensionRows('daily_language_stats', 'language_code', 'language_code', $siteId, $endDate, 20, $startDate);
     }
 
-    public function topEvents(string $siteId, string $date, int $limit = 10): array
+    public function topEvents(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
     {
-        $statement = $this->database->pdo()->prepare('SELECT event_name, events FROM daily_event_stats WHERE site_id = :site_id AND date = :date ORDER BY events DESC, event_name ASC LIMIT :limit');
+        $startDate ??= $endDate;
+        $statement = $this->database->pdo()->prepare('SELECT event_name, SUM(events) AS events FROM daily_event_stats WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date GROUP BY event_name ORDER BY events DESC, event_name ASC LIMIT :limit');
         $statement->bindValue(':site_id', $siteId, \PDO::PARAM_STR);
-        $statement->bindValue(':date', $date, \PDO::PARAM_STR);
+        $statement->bindValue(':start_date', $startDate, \PDO::PARAM_STR);
+        $statement->bindValue(':end_date', $endDate, \PDO::PARAM_STR);
         $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
         $statement->execute();
         return array_map(static fn(array $row): array => ['event_name' => (string) $row['event_name'], 'events' => (int) $row['events']], $statement->fetchAll());
     }
 
-    public function campaigns(string $siteId, string $date, int $limit = 10): array
+    public function campaigns(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
     {
-        $statement = $this->database->pdo()->prepare('SELECT campaign_source, campaign_medium, campaign_name, visits FROM daily_campaign_stats WHERE site_id = :site_id AND date = :date ORDER BY visits DESC, campaign_source ASC LIMIT :limit');
+        $startDate ??= $endDate;
+        $statement = $this->database->pdo()->prepare('SELECT campaign_source, campaign_medium, campaign_name, SUM(visits) AS visits FROM daily_campaign_stats WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date GROUP BY campaign_source, campaign_medium, campaign_name ORDER BY visits DESC, campaign_source ASC LIMIT :limit');
         $statement->bindValue(':site_id', $siteId, \PDO::PARAM_STR);
-        $statement->bindValue(':date', $date, \PDO::PARAM_STR);
+        $statement->bindValue(':start_date', $startDate, \PDO::PARAM_STR);
+        $statement->bindValue(':end_date', $endDate, \PDO::PARAM_STR);
         $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
         $statement->execute();
         return $statement->fetchAll();
     }
 
-    private function dimensionRows(string $table, string $column, string $outputColumn, string $siteId, string $date, int $limit): array
+    private function dimensionRows(string $table, string $column, string $outputColumn, string $siteId, string $endDate, int $limit, ?string $startDate = null): array
     {
         $allowed = [
             'daily_referrer_stats' => 'referrer_domain',
@@ -250,15 +325,18 @@ final class DashboardQuery
             return [];
         }
 
+        $startDate ??= $endDate;
         $statement = $this->database->pdo()->prepare(
-            "SELECT {$column} AS dimension_value, visits
+            "SELECT {$column} AS dimension_value, SUM(visits) AS visits
              FROM {$table}
-             WHERE site_id = :site_id AND date = :date
+             WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date
+             GROUP BY {$column}
              ORDER BY visits DESC, {$column} ASC
              LIMIT :limit",
         );
         $statement->bindValue(':site_id', $siteId, \PDO::PARAM_STR);
-        $statement->bindValue(':date', $date, \PDO::PARAM_STR);
+        $statement->bindValue(':start_date', $startDate, \PDO::PARAM_STR);
+        $statement->bindValue(':end_date', $endDate, \PDO::PARAM_STR);
         $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
         $statement->execute();
 
