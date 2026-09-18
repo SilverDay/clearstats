@@ -4,3 +4,23 @@ RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
+
+# track.js is loaded on every pageview of every tracked site, so letting
+# browsers skip re-fetching it on repeat pageviews within the same visit is
+# worth doing. (JS is already gzip-compressed server-wide via
+# /etc/apache2/mods-enabled/deflate.conf — not repeated here.) Kept to 1
+# hour, not a long/immutable cache: the URL has no version query string
+# (every already-installed site's literal <script src> points at this exact
+# path), so a script update must still reach visitors in a reasonable time.
+<IfModule mod_expires.c>
+    <FilesMatch "\.js$">
+        ExpiresActive On
+        ExpiresDefault "access plus 1 hour"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.js$">
+        Header set Cache-Control "public, max-age=3600"
+    </FilesMatch>
+</IfModule>

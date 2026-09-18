@@ -9,11 +9,18 @@ namespace ClearStats\Tests\Tracking;
 
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Tests assets/track.js, the readable, canonical source — not
+ * public/js/track.js, which is a minified BUILD of it (see
+ * bin/build-track-js.php). Minification renames local variables, which
+ * would break these tests' structural/regex assertions; the built file gets
+ * its own lighter sanity checks in TrackScriptBuildTest.
+ */
 final class TrackScriptTest extends TestCase
 {
     public function testTrackingScriptUsesMinimalPrivacySafePayload(): void
     {
-        $script = file_get_contents(__DIR__ . '/../../public/js/track.js');
+        $script = file_get_contents(__DIR__ . '/../../assets/track.js');
         $this->assertNotFalse($script);
 
         $this->assertStringContainsString('data-site-id', $script);
@@ -33,7 +40,7 @@ final class TrackScriptTest extends TestCase
 
     public function testOutboundLinksFileDownloadsAnd404TrackingAreOptIn(): void
     {
-        $script = file_get_contents(__DIR__ . '/../../public/js/track.js');
+        $script = file_get_contents(__DIR__ . '/../../assets/track.js');
         $this->assertNotFalse($script);
 
         $this->assertStringContainsString("hasAttribute('data-outbound-links')", $script);

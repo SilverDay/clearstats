@@ -4,7 +4,7 @@ SPDX-PackageSupplier = "Klaus-E. Klingner <SilverDay Media>"
 SPDX-PackageDownloadLocation = "https://clearstats.online"
 
 [[annotations]]
-path = ["public/**", "src/**", "bin/**", "tests/**", "migrations/**", "config/**", "integrations/**", "*.json", "*.php"]
+path = ["public/**", "src/**", "bin/**", "tests/**", "migrations/**", "config/**", "integrations/**", "assets/**", "*.json", "*.php"]
 SPDX-FileCopyrightText = "Klaus-E. Klingner (SilverDay Media)"
 SPDX-License-Identifier = "MIT"
 

@@ -13,6 +13,7 @@ The working foundation is implemented: multi-user authentication, site and user 
 - Apache (with `mod_rewrite` for front-controller routing)
 - Redis (shared instance acceptable — see `CLAUDE.md` on namespacing)
 - Composer
+- Node/npm — only to rebuild `public/js/track.js` from its source after editing `assets/track.js` (`php bin/build-track-js.php`); not a runtime dependency of the application itself
 
 ## Getting started
 
@@ -64,7 +65,8 @@ See [docs/tracking-guide.md](docs/tracking-guide.md) for tracker installation, c
 ## Project layout
 
 ```
-public/            Front controller + static tracking script
+public/            Front controller + built (minified) tracking script
+assets/            Source assets that get built into public/ (currently: track.js)
 src/Http/           Routing / request-response plumbing
 src/Ingestion/       Event validation, visitor-hash computation, Redis queue push
 src/Domain/          Site/user/tenant domain logic

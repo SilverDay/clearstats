@@ -8,7 +8,7 @@ ClearStats (clearstats.de) is a self-hosted, multi-site, GDPR-compliant, cookiel
 
 ## Non-negotiable constraints
 
-- **No cookies. No client-side persistent storage on the tracking surface** (no localStorage/sessionStorage identifiers). This is the core product promise for anything a tracked site's visitor loads — above all `public/js/track.js`. Do not introduce either there, even for "just" a UX convenience, without flagging it explicitly as a design change and stopping for confirmation. `tests/Tracking/TrackScriptTest.php` enforces this; do not weaken that test.
+- **No cookies. No client-side persistent storage on the tracking surface** (no localStorage/sessionStorage identifiers). This is the core product promise for anything a tracked site's visitor loads — above all the tracking script, edited at `assets/track.js` (source) and shipped as the minified `public/js/track.js` (build — see the source-vs-build-file decision below; edit the source, not the built file). Do not introduce either there, even for "just" a UX convenience, without flagging it explicitly as a design change and stopping for confirmation. `tests/Tracking/TrackScriptTest.php` (source) and `TrackScriptBuildTest.php` (built file) enforce this; do not weaken either.
 - **Exception — first-party dashboard UI** (owner-approved, 2026-09-15): the authenticated/marketing pages served by ClearStats itself may persist *UI preferences* in `localStorage`. Currently only the theme choice (`clearstats-theme`, values `system`/`light`/`dark`). This is operator-facing chrome, not visitor tracking. The boundary: never store a visitor or session identifier, and never extend this to `track.js` or anything it loads.
 - **No raw IP or raw User-Agent is ever persisted to disk or DB.** They are valid inputs to the per-request visitor-hash computation (see below) and must be discarded immediately after. If you're about to write either to a table, a log file, or anywhere durable — stop and ask first. This is the load-bearing privacy control for the whole compliance posture; treat it as a hard boundary, not a style preference.
 - **Salt secrecy.** The daily HMAC salt (§3 of the spec) must never be logged, never exposed via any API response, never sent to any client script.
@@ -47,6 +47,7 @@ php bin/create-user.php admin@example.com            # first admin account; pass
 php bin/queue-worker.php --limit=100                  # drain Redis -> events_raw (cron-friendly, finite run)
 php bin/rollup.php                                    # aggregate today (UTC) + purge expired raw events
 php bin/rollup.php --date=2026-09-14                  # aggregate a specific UTC date
+php bin/build-track-js.php                            # rebuild public/js/track.js from assets/track.js (needs Node/npm)
 ```
 
 PHPUnit tests run against an isolated in-memory SQLite schema (`tests/sqlite-schema.sql`, loaded by `tests/TestDatabase.php`) — they never touch the configured MariaDB database. A few ingestion tests (queue, abuse monitor, rate limiter) hit the real local Redis and clean up their own `clearstats:` test keys, so a reachable local Redis is required for the full suite to pass, not just for manual testing.
@@ -55,7 +56,7 @@ There is no CI config in this repo (no `.github/workflows`) — running the comm
 
 ## Architecture summary (see spec for full detail)
 
-- Client: a single static JS file (`public/js/track.js`) embedded via `<script defer data-site-id="...">` on tracked pages. Sends one beacon per pageview via `sendBeacon`/`fetch keepalive`. No cookies, no fingerprinting-adjacent data collection.
+- Client: a single static JS file (`public/js/track.js`, built from `assets/track.js`) embedded via `<script defer data-site-id="...">` on tracked pages. Sends one beacon per pageview via `sendBeacon`/`fetch keepalive`. No cookies, no fingerprinting-adjacent data collection.
 - Ingestion API (`POST /api/event`, routed through `src/Http/` → `src/Ingestion/`): validates the request, computes the visitor hash server-side (`HMAC-SHA256(daily_salt, domain||ip||ua)`), discards raw IP/UA immediately, pushes the event onto Redis (`clearstats:events`).
 - A worker (`bin/`) drains the Redis queue in batches and bulk-inserts into the raw events table.
 - A rollup cron job aggregates raw events into `daily_*_stats` tables; the dashboard reads only from rollup tables, never raw events.
@@ -93,6 +94,7 @@ There is no CI config in this repo (no `.github/workflows`) — running the comm
 | Web fonts | Self-hosted WOFF2, not Google Fonts — avoids leaking visitor IPs |
 | UI styling | Single stylesheet (`public/css/app-shell.css`); no per-template `<style>` blocks |
 | Schema migrations | Tracked via `bin/migrate.php` + a `schema_migrations` table (2026-09-18, after a prod outage from a hand-applied schema change). `migrations/0001_initial_schema.sql` is closed history — do not edit it further; every new schema change is a new numbered file (`0002_...`) |
+| track.js source vs. served file | `assets/track.js` is the canonical, tested source; `public/js/track.js` is a minified **build** of it (`bin/build-track-js.php`, terser) — every already-installed site's `<script src>` points at that exact URL, so it's what's actually served, not the source. Edit `assets/track.js`, then rebuild and commit both files |
 
 ## Open items (see spec §12 — do not resolve unilaterally, surface to the user)
 
