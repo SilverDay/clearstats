@@ -42,6 +42,7 @@ final class StatsRollupTest extends TestCase
         $referrerRow = $pdo->query("SELECT visits FROM daily_referrer_stats WHERE site_id = 'site-a' AND date = '2026-09-14' AND referrer_domain = 'example.org'")->fetch();
         $countryRow = $pdo->query("SELECT visits FROM daily_country_stats WHERE site_id = 'site-a' AND date = '2026-09-14' AND country_code = 'DE'")->fetch();
         $deviceRow = $pdo->query("SELECT visits FROM daily_device_stats WHERE site_id = 'site-a' AND date = '2026-09-14' AND device_type = 'mobile'")->fetch();
+        $browserRow = $pdo->query("SELECT visits FROM daily_browser_stats WHERE site_id = 'site-a' AND date = '2026-09-14' AND browser = 'chrome'")->fetch();
 
         $this->assertSame('3', (string) $siteRow['pageviews']);
         $this->assertSame('2', (string) $siteRow['unique_visitor_hashes_count']);
@@ -49,6 +50,7 @@ final class StatsRollupTest extends TestCase
         $this->assertSame('2', (string) $referrerRow['visits']);
         $this->assertSame('2', (string) $countryRow['visits']);
         $this->assertSame('1', (string) $deviceRow['visits']);
+        $this->assertSame('2', (string) $browserRow['visits']);
     }
 
     public function testDimensionRollupsCountOncePerPageviewNotPerEvent(): void

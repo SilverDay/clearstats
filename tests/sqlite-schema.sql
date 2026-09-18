@@ -124,6 +124,13 @@ CREATE TABLE IF NOT EXISTS daily_campaign_stats (
         campaign_name
     )
 );
+CREATE TABLE IF NOT EXISTS daily_browser_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    browser TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, browser)
+);
 CREATE TABLE IF NOT EXISTS daily_os_stats (
     site_id TEXT NOT NULL,
     date TEXT NOT NULL,

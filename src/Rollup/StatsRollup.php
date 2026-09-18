@@ -20,7 +20,7 @@ final class StatsRollup
     {
         $pdo = $this->database->pdo();
 
-        foreach (['daily_page_stats', 'daily_referrer_stats', 'daily_country_stats', 'daily_device_stats', 'daily_os_stats', 'daily_language_stats', 'daily_event_stats', 'daily_campaign_stats', 'daily_campaign_term_stats', 'daily_campaign_content_stats', 'daily_region_stats', 'daily_city_stats', 'daily_revenue_stats'] as $table) {
+        foreach (['daily_page_stats', 'daily_referrer_stats', 'daily_country_stats', 'daily_device_stats', 'daily_os_stats', 'daily_language_stats', 'daily_browser_stats', 'daily_event_stats', 'daily_campaign_stats', 'daily_campaign_term_stats', 'daily_campaign_content_stats', 'daily_region_stats', 'daily_city_stats', 'daily_revenue_stats'] as $table) {
             $clear = $pdo->prepare("DELETE FROM {$table} WHERE site_id = :site_id AND date = :date");
             $clear->execute(['site_id' => $siteId, 'date' => $date]);
         }
@@ -153,6 +153,7 @@ final class StatsRollup
             ['column' => 'device_type', 'table' => 'daily_device_stats', 'label' => 'device_type'],
             ['column' => 'operating_system', 'table' => 'daily_os_stats', 'label' => 'operating_system'],
             ['column' => 'language_code', 'table' => 'daily_language_stats', 'label' => 'language_code'],
+            ['column' => 'browser', 'table' => 'daily_browser_stats', 'label' => 'browser'],
         ];
         foreach ($dimensions as $dimension) {
             $column = $dimension['column'];
@@ -176,6 +177,7 @@ final class StatsRollup
                     'daily_country_stats' => 'INSERT INTO daily_country_stats (site_id, date, country_code, visits) VALUES (:site_id, :date, :dimension_value, :visits)',
                     'daily_os_stats' => 'INSERT INTO daily_os_stats (site_id, date, operating_system, visits) VALUES (:site_id, :date, :dimension_value, :visits)',
                     'daily_language_stats' => 'INSERT INTO daily_language_stats (site_id, date, language_code, visits) VALUES (:site_id, :date, :dimension_value, :visits)',
+                    'daily_browser_stats' => 'INSERT INTO daily_browser_stats (site_id, date, browser, visits) VALUES (:site_id, :date, :dimension_value, :visits)',
                     default => 'INSERT INTO daily_device_stats (site_id, date, device_type, visits) VALUES (:site_id, :date, :dimension_value, :visits)',
                 };
                 $pdo->prepare($insert)->execute([

@@ -44,6 +44,7 @@ final class DashboardController
         $countryRows = $this->emptyRow();
         $deviceRows = $this->emptyRow();
         $osRows = $this->emptyRow('No OS data for this period.');
+        $browserRows = $this->emptyRow('No browser data for this period.');
         $languageRows = $this->emptyRow('No language data for this period.');
         $eventRows = $this->emptyRow('No conversion events for this period.');
         $campaignRows = $this->emptyRow('No campaign data for this period.');
@@ -105,6 +106,7 @@ final class DashboardController
                 $countryRows = $this->formatRows($this->query->portfolioTopCountries($siteIds, $endDate, 5, $startDate), 'country_code');
                 $deviceRows = $this->formatRows($this->query->portfolioDevices($siteIds, $endDate, $startDate), 'device_type');
                 $osRows = $this->formatRows($this->query->portfolioOperatingSystems($siteIds, $endDate, $startDate), 'operating_system');
+                $browserRows = $this->formatRows($this->query->portfolioBrowsers($siteIds, $endDate, $startDate), 'browser');
                 $languageRows = $this->formatRows($this->query->portfolioLanguages($siteIds, $endDate, $startDate), 'language_code');
                 $eventRows = $this->formatRows($this->query->portfolioTopEvents($siteIds, $endDate, 5, $startDate), 'event_name', 'events');
                 $campaignRows = $this->formatCampaignRows($this->query->portfolioCampaigns($siteIds, $endDate, 5, $startDate));
@@ -131,6 +133,7 @@ final class DashboardController
                 $countryRows = $this->formatRows($this->query->topCountries($selectedSiteId, $endDate, 5, $startDate), 'country_code');
                 $deviceRows = $this->formatRows($this->query->devices($selectedSiteId, $endDate, $startDate), 'device_type');
                 $osRows = $this->formatRows($this->query->operatingSystems($selectedSiteId, $endDate, $startDate), 'operating_system');
+                $browserRows = $this->formatRows($this->query->browsers($selectedSiteId, $endDate, $startDate), 'browser');
                 $languageRows = $this->formatRows($this->query->languages($selectedSiteId, $endDate, $startDate), 'language_code');
                 $eventRows = $this->formatRows($this->query->topEvents($selectedSiteId, $endDate, 5, $startDate), 'event_name', 'events');
                 $campaignRows = $this->formatCampaignRows($this->query->campaigns($selectedSiteId, $endDate, 5, $startDate));
@@ -257,12 +260,19 @@ final class DashboardController
                 </table></div>
             </section>
 
-            <div class="grid grid-2">
+            <div class="grid grid-3">
                 <section class="card">
                     <h2 class="card-title">Operating systems</h2>
                     <div class="table-wrap"><table class="table">
                         <thead><tr><th>OS</th><th>Visits</th></tr></thead>
                         <tbody>{{OS}}</tbody>
+                    </table></div>
+                </section>
+                <section class="card">
+                    <h2 class="card-title">Browsers</h2>
+                    <div class="table-wrap"><table class="table">
+                        <thead><tr><th>Browser</th><th>Visits</th></tr></thead>
+                        <tbody>{{BROWSERS}}</tbody>
                     </table></div>
                 </section>
                 <section class="card">
@@ -324,8 +334,8 @@ final class DashboardController
 HTML;
 
         echo str_replace(
-            ['{{PAGEVIEWS}}', '{{VISITORS}}', '{{SESSIONS}}', '{{BOUNCE_RATE}}', '{{ENGAGEMENT}}', '{{TOP_PAGES}}', '{{REFERRERS}}', '{{COUNTRIES}}', '{{REGIONS}}', '{{CITIES}}', '{{DEVICES}}', '{{OS}}', '{{LANGUAGES}}', '{{EVENTS}}', '{{CAMPAIGNS}}', '{{CAMPAIGN_TERMS}}', '{{CAMPAIGN_CONTENT}}', '{{REVENUE}}', '{{RANGE_LABEL}}', '{{CHART_BARS}}', '{{CHART_AXIS}}', '{{SITE_OPTIONS}}', '{{SELECTED_SITE}}', '{{RANGE_PICKER}}', '{{RANGE}}'],
-            [$pageviews, $visitors, $sessions, $bounceRate, $engagement, $topPageRows, $referrerRows, $countryRows, $regionRows, $cityRows, $deviceRows, $osRows, $languageRows, $eventRows, $campaignRows, $campaignTermRows, $campaignContentRows, $revenueRows, htmlspecialchars($rangeLabel, ENT_QUOTES, 'UTF-8'), $chartBars, $chartAxis, $siteOptions, htmlspecialchars($selectedSiteLabel, ENT_QUOTES, 'UTF-8'), $rangePicker, htmlspecialchars($range, ENT_QUOTES, 'UTF-8')],
+            ['{{PAGEVIEWS}}', '{{VISITORS}}', '{{SESSIONS}}', '{{BOUNCE_RATE}}', '{{ENGAGEMENT}}', '{{TOP_PAGES}}', '{{REFERRERS}}', '{{COUNTRIES}}', '{{REGIONS}}', '{{CITIES}}', '{{DEVICES}}', '{{OS}}', '{{BROWSERS}}', '{{LANGUAGES}}', '{{EVENTS}}', '{{CAMPAIGNS}}', '{{CAMPAIGN_TERMS}}', '{{CAMPAIGN_CONTENT}}', '{{REVENUE}}', '{{RANGE_LABEL}}', '{{CHART_BARS}}', '{{CHART_AXIS}}', '{{SITE_OPTIONS}}', '{{SELECTED_SITE}}', '{{RANGE_PICKER}}', '{{RANGE}}'],
+            [$pageviews, $visitors, $sessions, $bounceRate, $engagement, $topPageRows, $referrerRows, $countryRows, $regionRows, $cityRows, $deviceRows, $osRows, $browserRows, $languageRows, $eventRows, $campaignRows, $campaignTermRows, $campaignContentRows, $revenueRows, htmlspecialchars($rangeLabel, ENT_QUOTES, 'UTF-8'), $chartBars, $chartAxis, $siteOptions, htmlspecialchars($selectedSiteLabel, ENT_QUOTES, 'UTF-8'), $rangePicker, htmlspecialchars($range, ENT_QUOTES, 'UTF-8')],
             $html,
         );
     }

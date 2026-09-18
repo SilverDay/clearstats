@@ -140,6 +140,26 @@ final class DashboardQueryTest extends TestCase
         $this->assertSame(3, $query->portfolioLanguages(['site-a', 'site-b'], '2026-09-14')[0]['visits']);
     }
 
+    public function testLoadsBrowsersForASiteAndAcrossAPortfolio(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM daily_browser_stats WHERE site_id IN ('site-a', 'site-b')");
+        $pdo->exec("INSERT INTO daily_browser_stats (site_id, date, browser, visits) VALUES ('site-a', '2026-09-14', 'chrome', 5), ('site-b', '2026-09-14', 'chrome', 2)");
+
+        try {
+            $query = new DashboardQuery($database);
+
+            $this->assertSame('chrome', $query->browsers('site-a', '2026-09-14')[0]['browser']);
+            $this->assertSame(5, $query->browsers('site-a', '2026-09-14')[0]['visits']);
+
+            $this->assertSame('chrome', $query->portfolioBrowsers(['site-a', 'site-b'], '2026-09-14')[0]['browser']);
+            $this->assertSame(7, $query->portfolioBrowsers(['site-a', 'site-b'], '2026-09-14')[0]['visits']);
+        } finally {
+            $pdo->exec("DELETE FROM daily_browser_stats WHERE site_id IN ('site-a', 'site-b')");
+        }
+    }
+
     public function testPublicQueriesAggregateOnlyActiveSites(): void
     {
         $database = TestDatabase::create();

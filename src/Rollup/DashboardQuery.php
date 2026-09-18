@@ -205,6 +205,12 @@ final class DashboardQuery
     }
 
     /** @param list<string> $siteIds */
+    public function portfolioBrowsers(array $siteIds, string $endDate, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_browser_stats', 'browser', 'visits', 'browser', 'visits', $siteIds, $endDate, 20, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
     public function portfolioLanguages(array $siteIds, string $endDate, ?string $startDate = null): array
     {
         return $this->portfolioDimensionRows('daily_language_stats', 'language_code', 'visits', 'language_code', 'visits', $siteIds, $endDate, 20, $startDate);
@@ -451,6 +457,11 @@ final class DashboardQuery
         return $this->dimensionRows('daily_os_stats', 'operating_system', 'operating_system', $siteId, $endDate, 20, $startDate);
     }
 
+    public function browsers(string $siteId, string $endDate, ?string $startDate = null): array
+    {
+        return $this->dimensionRows('daily_browser_stats', 'browser', 'browser', $siteId, $endDate, 20, $startDate);
+    }
+
     public function languages(string $siteId, string $endDate, ?string $startDate = null): array
     {
         return $this->dimensionRows('daily_language_stats', 'language_code', 'language_code', $siteId, $endDate, 20, $startDate);
@@ -572,6 +583,7 @@ final class DashboardQuery
             'daily_device_stats' => 'device_type',
             'daily_os_stats' => 'operating_system',
             'daily_language_stats' => 'language_code',
+            'daily_browser_stats' => 'browser',
             'daily_campaign_term_stats' => 'campaign_term',
             'daily_campaign_content_stats' => 'campaign_content',
         ];
