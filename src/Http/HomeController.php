@@ -7,11 +7,35 @@ declare(strict_types=1);
 
 namespace ClearStats\Http;
 
+use ClearStats\Rollup\DashboardQuery;
+
 final class HomeController
 {
+    public function __construct(
+        private readonly ?DashboardQuery $query = null,
+    ) {}
+
     public function index(): void
     {
-        echo <<<'HTML'
+        $pageviews = '0';
+        $visitors = '0';
+        $bounceRate = '0%';
+        $chartBars = '<p class="chart-empty">No traffic data yet.</p>';
+
+        if ($this->query !== null) {
+            $endDate = gmdate('Y-m-d');
+            $startDate = gmdate('Y-m-d', strtotime('-6 days'));
+            $overview = $this->query->publicOverview($endDate, $startDate);
+            $pageviews = number_format($overview['pageviews']);
+            $visitors = number_format($overview['unique_visitor_hashes_count']);
+            $bounceRate = $overview['bounce_rate'] === null ? '0%' : number_format($overview['bounce_rate'], 1) . '%';
+            $chartBars = $this->formatChart($this->query->publicDailyPageviews($endDate, 7)) ?? $chartBars;
+        }
+
+        echo str_replace(
+            ['{{HERO_PAGEVIEWS}}', '{{HERO_VISITORS}}', '{{HERO_BOUNCE}}', '{{HERO_CHART}}'],
+            [$pageviews, $visitors, $bounceRate, $chartBars],
+            <<<'HTML'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,6 +57,7 @@ final class HomeController
                     <li>No cookies</li>
                     <li>No raw IP storage</li>
                     <li>GDPR-ready by design</li>
+                    <li>Open source (MIT)</li>
                 </ul>
             </div>
 
@@ -40,26 +65,17 @@ final class HomeController
                 <div class="hero-preview-head">
                     <div class="stat stat-plain">
                         <span class="stat-label">Portfolio overview</span>
-                        <span class="stat-value">41,204</span>
+                        <span class="stat-value">{{HERO_PAGEVIEWS}}</span>
                     </div>
-                    <span class="badge badge-success">Today</span>
+                    <span class="badge badge-success">All active sites</span>
                 </div>
                 <div class="grid grid-3">
-                    <div class="stat stat-plain"><span class="stat-value">31.2k</span><span class="stat-label">Pageviews</span></div>
-                    <div class="stat stat-plain"><span class="stat-value">12.4k</span><span class="stat-label">Visitors</span></div>
-                    <div class="stat stat-plain"><span class="stat-value">4.8%</span><span class="stat-label">Bounce rate</span></div>
+                    <div class="stat stat-plain"><span class="stat-value">{{HERO_PAGEVIEWS}}</span><span class="stat-label">Pageviews</span></div>
+                    <div class="stat stat-plain"><span class="stat-value">{{HERO_VISITORS}}</span><span class="stat-label">Visitors</span></div>
+                    <div class="stat stat-plain"><span class="stat-value">{{HERO_BOUNCE}}</span><span class="stat-label">Bounce rate</span></div>
                 </div>
-                <div class="chart" aria-hidden="true">
-                    <span class="chart-bar" style="height:34%"></span>
-                    <span class="chart-bar" style="height:48%"></span>
-                    <span class="chart-bar" style="height:42%"></span>
-                    <span class="chart-bar" style="height:63%"></span>
-                    <span class="chart-bar" style="height:54%"></span>
-                    <span class="chart-bar" style="height:78%"></span>
-                    <span class="chart-bar" style="height:69%"></span>
-                    <span class="chart-bar" style="height:92%"></span>
-                </div>
-                <div class="hero-preview-foot"><span>Last 7 days</span><span>Updated now</span></div>
+                <div class="chart" aria-hidden="true">{{HERO_CHART}}</div>
+                <div class="hero-preview-foot"><span>Last 7 days</span><span>Aggregated daily, not real-time</span></div>
             </div>
         </section>
 
@@ -82,18 +98,39 @@ final class HomeController
         </section>
 
         <footer class="site-footer">
-            <span>ClearStats</span>
+            <span>ClearStats by <a href="https://silverday.media" target="_blank" rel="noopener noreferrer">SilverDay Media</a></span>
             <nav aria-label="Footer navigation">
                 <a href="/about">About</a>
                 <a href="/faq">FAQ</a>
                 <a href="/privacy">Privacy</a>
                 <a href="/terms">Terms</a>
                 <a href="/imprint">Legal notice</a>
+                <a href="https://github.com/SilverDay/clearstats" target="_blank" rel="noopener noreferrer">Open source</a>
             </nav>
         </footer>
     </main>
 </body>
 </html>
-HTML;
+HTML,
+        );
+    }
+
+    /**
+     * @param list<array{date: string, pageviews: int}> $daily
+     */
+    private function formatChart(array $daily): ?string
+    {
+        if ($daily === []) {
+            return null;
+        }
+
+        $max = max(1, ...array_column($daily, 'pageviews'));
+        $bars = '';
+        foreach ($daily as $day) {
+            $height = max(4, (int) round(((int) $day['pageviews'] / $max) * 100));
+            $bars .= sprintf('<span class="chart-bar" style="height:%d%%"></span>', $height);
+        }
+
+        return $bars;
     }
 }

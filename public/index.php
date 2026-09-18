@@ -118,6 +118,14 @@ $controller = match ($controllerClass) {
         new ClearStats\Http\UserRepository(
             (new ClearStats\Db\Database($config['db']))->pdo(),
         ),
+        new ClearStats\Rollup\DashboardQuery(
+            new ClearStats\Db\Database($config['db']),
+        ),
+    ),
+    ClearStats\Http\HomeController::class => new $controllerClass(
+        new ClearStats\Rollup\DashboardQuery(
+            new ClearStats\Db\Database($config['db']),
+        ),
     ),
     ClearStats\Http\SiteController::class => new $controllerClass(
         new ClearStats\Http\SiteRepository(
@@ -223,7 +231,7 @@ if ($isHtmlRoute) {
 JS;
 
     $assets = '<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>'
-        . '<link rel="stylesheet" href="/css/app-shell.css?v=9">'
+        . '<link rel="stylesheet" href="/css/app-shell.css?v=10">'
         . $themeBoot
         . '<script defer src="/js/theme.js?v=5"></script>';
 

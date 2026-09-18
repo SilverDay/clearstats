@@ -139,4 +139,43 @@ final class DashboardQueryTest extends TestCase
         $this->assertSame('de-de', $query->portfolioLanguages(['site-a', 'site-b'], '2026-09-14')[0]['language_code']);
         $this->assertSame(3, $query->portfolioLanguages(['site-a', 'site-b'], '2026-09-14')[0]['visits']);
     }
+
+    public function testPublicQueriesAggregateOnlyActiveSites(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM daily_site_stats WHERE site_id IN ('public-active', 'public-inactive')");
+        $pdo->exec("DELETE FROM daily_country_stats WHERE site_id IN ('public-active', 'public-inactive')");
+        $pdo->exec("DELETE FROM sites WHERE id IN ('public-active', 'public-inactive')");
+        $pdo->prepare('INSERT INTO users (id, email, password_hash, role) VALUES (999, :e, :h, :r)')
+            ->execute(['e' => 'public-owner@example.test', 'h' => 'not-used', 'r' => 'admin']);
+        $pdo->prepare('INSERT INTO sites (id, name, domain, owner_user_id, active) VALUES (:id, :n, :d, 999, :a)')
+            ->execute(['id' => 'public-active', 'n' => 'Active', 'd' => 'public-active.test', 'a' => 1]);
+        $pdo->prepare('INSERT INTO sites (id, name, domain, owner_user_id, active) VALUES (:id, :n, :d, 999, :a)')
+            ->execute(['id' => 'public-inactive', 'n' => 'Inactive', 'd' => 'public-inactive.test', 'a' => 0]);
+        $pdo->exec("INSERT INTO daily_site_stats (site_id, date, pageviews, unique_visitor_hashes_count, sessions, bounces, avg_engagement_seconds) VALUES
+            ('public-active', '2026-09-14', 10, 4, 5, 1, 20),
+            ('public-inactive', '2026-09-14', 999, 999, 999, 999, 999)");
+        $pdo->exec("INSERT INTO daily_country_stats (site_id, date, country_code, visits) VALUES
+            ('public-active', '2026-09-14', 'DE', 5),
+            ('public-inactive', '2026-09-14', 'US', 1)");
+
+        try {
+            $query = new DashboardQuery($database);
+
+            $overview = $query->publicOverview('2026-09-14');
+            $this->assertSame(10, $overview['pageviews']);
+            $this->assertSame(4, $overview['unique_visitor_hashes_count']);
+
+            $daily = $query->publicDailyPageviews('2026-09-14', 1);
+            $this->assertSame(10, $daily[0]['pageviews']);
+
+            $this->assertSame(1, $query->publicRegionCount('2026-09-14'));
+        } finally {
+            $pdo->exec("DELETE FROM daily_site_stats WHERE site_id IN ('public-active', 'public-inactive')");
+            $pdo->exec("DELETE FROM daily_country_stats WHERE site_id IN ('public-active', 'public-inactive')");
+            $pdo->exec("DELETE FROM sites WHERE id IN ('public-active', 'public-inactive')");
+            $pdo->exec('DELETE FROM users WHERE id = 999');
+        }
+    }
 }

@@ -16,6 +16,82 @@ final class DashboardQuery
     ) {}
 
     /**
+     * Aggregate totals across every active site, regardless of who (if
+     * anyone) is logged in — used by the public homepage and login screen,
+     * which have no per-user site assignment to scope a site list to. Same
+     * shape and approximation caveats as portfolioOverview(), just always
+     * "every active site" instead of a caller-supplied list.
+     *
+     * @return array{pageviews: int, unique_visitor_hashes_count: int, sessions: int, bounces: int, avg_engagement_seconds: int, bounce_rate: float|null}
+     */
+    public function publicOverview(string $endDate, ?string $startDate = null): array
+    {
+        $startDate ??= $endDate;
+        $statement = $this->database->pdo()->prepare(
+            'SELECT COALESCE(SUM(dss.pageviews), 0) AS pageviews,
+                    COALESCE(SUM(dss.unique_visitor_hashes_count), 0) AS unique_visitor_hashes_count,
+                    COALESCE(SUM(dss.sessions), 0) AS sessions,
+                    COALESCE(SUM(dss.bounces), 0) AS bounces,
+                    COALESCE(SUM(dss.avg_engagement_seconds * dss.sessions), 0) AS engagement_total
+             FROM daily_site_stats dss
+             INNER JOIN sites ON sites.id = dss.site_id
+             WHERE sites.active = 1 AND dss.date BETWEEN :start_date AND :end_date',
+        );
+        $statement->execute(['start_date' => $startDate, 'end_date' => $endDate]);
+
+        $row = $statement->fetch() ?: [];
+        $sessions = (int) ($row['sessions'] ?? 0);
+        $bounces = (int) ($row['bounces'] ?? 0);
+
+        return [
+            'pageviews' => (int) ($row['pageviews'] ?? 0),
+            'unique_visitor_hashes_count' => (int) ($row['unique_visitor_hashes_count'] ?? 0),
+            'sessions' => $sessions,
+            'bounces' => $bounces,
+            'avg_engagement_seconds' => $sessions > 0 ? (int) round(((int) ($row['engagement_total'] ?? 0)) / $sessions) : 0,
+            'bounce_rate' => $sessions > 0 ? ($bounces / $sessions) * 100 : null,
+        ];
+    }
+
+    /**
+     * @return list<array{date: string, pageviews: int}>
+     */
+    public function publicDailyPageviews(string $endDate, int $days = 7): array
+    {
+        $days = max(1, min($days, 31));
+        $start = (new \DateTimeImmutable($endDate, new \DateTimeZone('UTC')))->modify('-' . ($days - 1) . ' days')->format('Y-m-d');
+        $statement = $this->database->pdo()->prepare(
+            'SELECT dss.date, SUM(dss.pageviews) AS pageviews
+             FROM daily_site_stats dss
+             INNER JOIN sites ON sites.id = dss.site_id
+             WHERE sites.active = 1 AND dss.date BETWEEN :start_date AND :end_date
+             GROUP BY dss.date
+             ORDER BY dss.date ASC',
+        );
+        $statement->execute(['start_date' => $start, 'end_date' => $endDate]);
+
+        return array_map(
+            static fn(array $row): array => ['date' => (string) $row['date'], 'pageviews' => (int) $row['pageviews']],
+            $statement->fetchAll(),
+        );
+    }
+
+    /** Distinct country codes seen across every active site in the window. */
+    public function publicRegionCount(string $endDate, ?string $startDate = null): int
+    {
+        $startDate ??= $endDate;
+        $statement = $this->database->pdo()->prepare(
+            'SELECT COUNT(DISTINCT dcs.country_code) AS regions
+             FROM daily_country_stats dcs
+             INNER JOIN sites ON sites.id = dcs.site_id
+             WHERE sites.active = 1 AND dcs.date BETWEEN :start_date AND :end_date',
+        );
+        $statement->execute(['start_date' => $startDate, 'end_date' => $endDate]);
+
+        return (int) $statement->fetchColumn();
+    }
+
+    /**
      * @return array{pageviews: int, unique_visitor_hashes_count: int, sessions: int, bounces: int, avg_engagement_seconds: int, bounce_rate: float|null}
      */
     public function overview(string $siteId, string $endDate, ?string $startDate = null): array

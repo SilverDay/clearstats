@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace ClearStats\Http;
 
+use ClearStats\Rollup\DashboardQuery;
+
 final class AuthController
 {
     private readonly AuthSession $session;
@@ -16,6 +18,7 @@ final class AuthController
         private readonly ?Authenticator $authenticator = null,
         private readonly ?AuthFailureMonitor $failureMonitor = null,
         private readonly ?UserRepository $users = null,
+        private readonly ?DashboardQuery $query = null,
     ) {
         $this->session = $session ?? new AuthSession();
     }
@@ -55,7 +58,22 @@ final class AuthController
 
         $csrfToken = htmlspecialchars($this->session->csrfToken(), ENT_QUOTES, 'UTF-8');
 
-        echo str_replace('{{CSRF_TOKEN}}', $csrfToken, <<<'HTML'
+        $pageviews = '0';
+        $bounceRate = '0%';
+        $regions = '0';
+        if ($this->query !== null) {
+            $endDate = gmdate('Y-m-d');
+            $startDate = gmdate('Y-m-d', strtotime('-6 days'));
+            $overview = $this->query->publicOverview($endDate, $startDate);
+            $pageviews = number_format($overview['pageviews']);
+            $bounceRate = $overview['bounce_rate'] === null ? '0%' : number_format($overview['bounce_rate'], 1) . '%';
+            $regions = number_format($this->query->publicRegionCount($endDate, $startDate));
+        }
+
+        echo str_replace(
+            ['{{CSRF_TOKEN}}', '{{PAGEVIEWS}}', '{{BOUNCE_RATE}}', '{{REGIONS}}'],
+            [$csrfToken, $pageviews, $bounceRate, $regions],
+            <<<'HTML'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -69,9 +87,9 @@ final class AuthController
             <h1 class="panel-title">Analytics that <em>respect privacy.</em></h1>
             <p class="panel-lede">Monitor your owned websites, protect user trust, and keep raw tracking data out of your stack with a self-hosted analytics platform designed for operators, not surveillance.</p>
             <div class="grid grid-3">
-                <div class="stat"><span class="stat-value">31k</span><span class="stat-label">Pageviews</span></div>
-                <div class="stat"><span class="stat-value">4.8%</span><span class="stat-label">Bounce</span></div>
-                <div class="stat"><span class="stat-value">92</span><span class="stat-label">Regions</span></div>
+                <div class="stat"><span class="stat-value">{{PAGEVIEWS}}</span><span class="stat-label">Pageviews (7d)</span></div>
+                <div class="stat"><span class="stat-value">{{BOUNCE_RATE}}</span><span class="stat-label">Bounce</span></div>
+                <div class="stat"><span class="stat-value">{{REGIONS}}</span><span class="stat-label">Regions</span></div>
             </div>
         </section>
 
@@ -93,7 +111,8 @@ final class AuthController
     </main>
 </body>
 </html>
-HTML);
+HTML,
+        );
     }
 
     public function logout(): void

@@ -780,14 +780,23 @@ pre {
     flex-direction: column;
 }
 
+/* Fixed, definite height by default — chart-bar's height:X% needs a definite
+   ancestor height to resolve against, and outside .card-chart (e.g. the
+   homepage hero preview) there's no flex context to provide one. */
 .chart {
     display: flex;
     align-items: flex-end;
     gap: var(--space-sm);
-    flex: 1;
-    min-height: 180px;
+    height: 180px;
     padding-top: var(--space-xl);
     border-bottom: 1px solid var(--color-border);
+}
+
+/* Inside a .card-chart flex column, grow to fill the row's stretched
+   height instead of leaving dead space under a shorter fixed chart. */
+.card-chart .chart {
+    flex: 1;
+    height: auto;
 }
 
 .chart-bar {
