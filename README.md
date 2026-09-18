@@ -22,7 +22,14 @@ cp config/config.example.php config/config.php
 # edit config/config.php with DB/Redis credentials
 ```
 
-Run migrations (see `migrations/`) against your MariaDB instance before starting the app.
+Run pending migrations against your MariaDB instance before starting the app, and again after every pull that touches `migrations/`:
+
+```bash
+php bin/migrate.php            # apply everything pending
+php bin/migrate.php --status   # list applied/pending without running anything
+```
+
+Applied migrations are tracked in a `schema_migrations` table, so re-running is always safe. Schema changes are added as new numbered files in `migrations/` (`0002_...`, `0003_...`); `0001_initial_schema.sql` is closed history and is not edited in place anymore.
 
 Create the first administrator after migrations have run. The password is entered interactively and is not placed in shell history:
 

@@ -41,6 +41,8 @@ vendor/bin/phpcs --standard=PSR12 src tests          # phpcs is a dev dependency
                                                        # standard and is noisy; pass --standard explicitly
 vendor/bin/phpcbf --standard=PSR12 src tests          # auto-fix what phpcbf can
 
+php bin/migrate.php --status                          # list applied/pending schema migrations
+php bin/migrate.php                                    # apply pending migrations, tracked in schema_migrations
 php bin/create-user.php admin@example.com            # first admin account; password prompted, not passed as arg
 php bin/queue-worker.php --limit=100                  # drain Redis -> events_raw (cron-friendly, finite run)
 php bin/rollup.php                                    # aggregate today (UTC) + purge expired raw events
@@ -90,6 +92,7 @@ There is no CI config in this repo (no `.github/workflows`) — running the comm
 | Dashboard UI storage | `localStorage` allowed for UI preferences only (theme); never on the tracking surface |
 | Web fonts | Self-hosted WOFF2, not Google Fonts — avoids leaking visitor IPs |
 | UI styling | Single stylesheet (`public/css/app-shell.css`); no per-template `<style>` blocks |
+| Schema migrations | Tracked via `bin/migrate.php` + a `schema_migrations` table (2026-09-18, after a prod outage from a hand-applied schema change). `migrations/0001_initial_schema.sql` is closed history — do not edit it further; every new schema change is a new numbered file (`0002_...`) |
 
 ## Open items (see spec §12 — do not resolve unilaterally, surface to the user)
 

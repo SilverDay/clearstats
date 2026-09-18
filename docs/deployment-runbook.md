@@ -1,5 +1,16 @@
 # ClearStats Deployment Runbook
 
+## Deploying a schema change
+
+Every deploy that includes a new file under `migrations/` must run it against production before (or as part of) the code rollout that depends on it — the dashboard/ingestion code is not written defensively against a missing column, so a code deploy that outruns its own migration fails the same way the September 2026 `daily_page_stats` incident did.
+
+```bash
+php bin/migrate.php --status   # see what's pending first
+php bin/migrate.php            # apply it
+```
+
+`schema_migrations` tracks what has run, so this is safe to invoke on every deploy even when nothing is pending. New schema changes are new numbered files (`0002_...`, `0003_...`) — `migrations/0001_initial_schema.sql` is closed history and must not be edited in place.
+
 ## Web deployment
 
 - Set the web server document root to `public/`; do not expose `config/`, `src/`, `tests/`, `migrations/`, or `logs/`.
