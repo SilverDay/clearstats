@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: Klaus-E. Klingner (SilverDay Media)
+SPDX-License-Identifier: MIT
+-->
+<extension type="plugin" group="system" method="upgrade">
+    <name>PLG_SYSTEM_CLEARSTATS</name>
+    <author>SilverDay Media</author>
+    <creationDate>2026-09-18</creationDate>
+    <copyright>Copyright (C) Klaus-E. Klingner (SilverDay Media)</copyright>
+    <license>MIT License</license>
+    <authorEmail>klingner@silverday.de</authorEmail>
+    <authorUrl>https://silverday.media</authorUrl>
+    <version>1.0.0</version>
+    <description>PLG_SYSTEM_CLEARSTATS_XML_DESCRIPTION</description>
+    <namespace path="src">ClearStats\Plugin\System\Clearstats</namespace>
+    <files>
+        <folder plugin="clearstats">services</folder>
+        <folder>src</folder>
+        <folder>language</folder>
+    </files>
+    <languages>
+        <language tag="en-GB">language/en-GB/en-GB.plg_system_clearstats.ini</language>
+        <language tag="en-GB">language/en-GB/en-GB.plg_system_clearstats.sys.ini</language>
+    </languages>
+    <config>
+        <fields name="params">
+            <fieldset name="basic">
+                <field
+                    name="intro"
+                    type="note"
+                    label="PLG_SYSTEM_CLEARSTATS_FIELD_INTRO_LABEL"
+                    description="PLG_SYSTEM_CLEARSTATS_FIELD_INTRO_DESC"
+                />
+                <field
+                    name="script_domain"
+                    type="url"
+                    default="https://clearstats.online"
+                    label="PLG_SYSTEM_CLEARSTATS_FIELD_SCRIPT_DOMAIN_LABEL"
+                    description="PLG_SYSTEM_CLEARSTATS_FIELD_SCRIPT_DOMAIN_DESC"
+                    required="true"
+                    filter="url"
+                />
+                <field
+                    name="site_id"
+                    type="text"
+                    label="PLG_SYSTEM_CLEARSTATS_FIELD_SITE_ID_LABEL"
+                    description="PLG_SYSTEM_CLEARSTATS_FIELD_SITE_ID_DESC"
+                    required="true"
+                />
+                <field
+                    name="track_outbound_links"
+                    type="radio"
+                    layout="joomla.form.field.radio.switcher"
+                    label="PLG_SYSTEM_CLEARSTATS_FIELD_OUTBOUND_LABEL"
+                    description="PLG_SYSTEM_CLEARSTATS_FIELD_OUTBOUND_DESC"
+                    default="0"
+                >
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field
+                    name="track_file_downloads"
+                    type="radio"
+                    layout="joomla.form.field.radio.switcher"
+                    label="PLG_SYSTEM_CLEARSTATS_FIELD_DOWNLOADS_LABEL"
+                    description="PLG_SYSTEM_CLEARSTATS_FIELD_DOWNLOADS_DESC"
+                    default="0"
+                >
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field
+                    name="track_404"
+                    type="radio"
+                    layout="joomla.form.field.radio.switcher"
+                    label="PLG_SYSTEM_CLEARSTATS_FIELD_404_LABEL"
+                    description="PLG_SYSTEM_CLEARSTATS_FIELD_404_DESC"
+                    default="0"
+                >
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+            </fieldset>
+        </fields>
+    </config>
+</extension>

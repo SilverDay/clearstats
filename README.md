@@ -75,6 +75,7 @@ migrations/          SQL schema migrations
 docs/                Full software specification
 config/              Environment configuration (config.php is gitignored)
 tests/               PHPUnit tests
+integrations/        CMS/platform plugins that install track.js for you (currently: Joomla)
 ```
 
 ## License

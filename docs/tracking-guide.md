@@ -12,6 +12,10 @@ Add the site-specific snippet before the closing `</body>` tag:
 
 Use the site ID shown by ClearStats after site creation or from the site's **Install** page.
 
+### CMS plugins
+
+For platforms with a plugin system, installing the snippet by hand isn't the only option — see [`integrations/`](../integrations/) in this repository. Currently available: a Joomla 4/5 system plugin (`integrations/joomla-clearstats/`).
+
 ### Optional automatic tracking
 
 Outbound-link, file-download, and 404 tracking are opt-in — installing the base snippet above does not enable them. Add the relevant attribute to collect more than the default:
