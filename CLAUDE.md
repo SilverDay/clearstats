@@ -26,6 +26,31 @@ ClearStats (clearstats.de) is a self-hosted, multi-site, GDPR-compliant, cookiel
 - Authentication baseline: NIST SP 800-63B.
 - Licensing: MIT for code (default), EUPL-1.2 considered as a European alternative if ever needed; non-code assets under CC BY-SA 4.0. See `REUSE.toml`. Follow REUSE spec conventions (SPDX headers in new files, `.license` sidecars where a header can't be embedded).
 
+## Commands
+
+```bash
+composer install                                    # install deps (PHP 8.3+, ext-pdo, ext-redis)
+cp config/config.example.php config/config.php      # then edit with real DB/Redis creds (gitignored)
+
+vendor/bin/phpunit tests                             # full suite — no phpunit.xml; point at tests/ explicitly
+vendor/bin/phpunit tests/Ingestion/VisitorHasherTest.php          # single file
+vendor/bin/phpunit --filter testSaltIsStableAcrossAUtcDayAndRotatesAtTheBoundary   # single test by name (any file)
+
+vendor/bin/phpcs --standard=PSR12 src tests          # phpcs is a dev dependency but no committed ruleset.xml —
+                                                       # bare `vendor/bin/phpcs src` falls back to the PEAR
+                                                       # standard and is noisy; pass --standard explicitly
+vendor/bin/phpcbf --standard=PSR12 src tests          # auto-fix what phpcbf can
+
+php bin/create-user.php admin@example.com            # first admin account; password prompted, not passed as arg
+php bin/queue-worker.php --limit=100                  # drain Redis -> events_raw (cron-friendly, finite run)
+php bin/rollup.php                                    # aggregate today (UTC) + purge expired raw events
+php bin/rollup.php --date=2026-09-14                  # aggregate a specific UTC date
+```
+
+PHPUnit tests run against an isolated in-memory SQLite schema (`tests/sqlite-schema.sql`, loaded by `tests/TestDatabase.php`) — they never touch the configured MariaDB database. A few ingestion tests (queue, abuse monitor, rate limiter) hit the real local Redis and clean up their own `clearstats:` test keys, so a reachable local Redis is required for the full suite to pass, not just for manual testing.
+
+There is no CI config in this repo (no `.github/workflows`) — running the commands above locally before handing back a change is the only check that happens.
+
 ## Architecture summary (see spec for full detail)
 
 - Client: a single static JS file (`public/js/track.js`) embedded via `<script defer data-site-id="...">` on tracked pages. Sends one beacon per pageview via `sendBeacon`/`fetch keepalive`. No cookies, no fingerprinting-adjacent data collection.
@@ -34,6 +59,21 @@ ClearStats (clearstats.de) is a self-hosted, multi-site, GDPR-compliant, cookiel
 - A rollup cron job aggregates raw events into `daily_*_stats` tables; the dashboard reads only from rollup tables, never raw events.
 - Raw events are purged per-site on a configurable retention window (`sites.raw_event_retention_days`).
 - `ip_source` is configurable per site (`direct` / `x-forwarded-for` / `cf-connecting-ip`), each with a trusted-proxy allowlist check before the header is trusted.
+
+## Request & data flow (spans multiple files — read together, not in isolation)
+
+**Every HTTP request** goes through `public/index.php`, which is more than a dispatcher:
+1. Sets security headers (CSP-adjacent headers, HSTS gated on `config.app.https`) before anything else runs.
+2. `Router::route()` (`src/Http/Router.php`) is a flat, hand-written `"METHOD /path" => [controller, action]` map — no dynamic segments, no regex. New routes are added there, literally.
+3. Routes to `DashboardController`/`SiteController`/`UserController` are treated as protected: `index.php` itself checks `AuthSession::isAuthenticated()` and looks up the user's `role` directly (bypassing repositories) before instantiating anything, and redirects to `/login` on failure. Don't assume a controller enforces its own auth — the front controller does it for these three.
+4. `index.php` also hand-wires every controller's constructor dependencies inline (`match ($controllerClass) { ... }`) — there is no DI container. Adding a controller dependency means editing this match arm, not just the class.
+5. For HTML routes (everything except `EventController`/`HealthController`) it output-buffers the controller, then string-injects the top nav, font preload, `app-shell.css`, and an inline pre-paint theme-detection `<script>` (reads `localStorage['clearstats-theme']`) via `preg_replace_callback`/`str_replace` on the buffered HTML — there's no templating engine doing this, it's literally post-processing the rendered string.
+
+**The ingestion pipeline** (`POST /api/event`) is the most security-sensitive path — trace it across these files together when touching it: `EventController` (orchestration + validation) → `Domain\SiteValidation`/`SiteAccessPolicy` (is this site_id/origin allowed) → `ClientIpResolver` (resolves the real client IP per the site's configured `ip_source`, honoring only `trusted_proxy_ips`) → `VisitorHasher` + `SaltProvider` (computes `HMAC-SHA256(daily_salt, domain||ip||ua)`; `SaltProvider` reads/rotates `salt_state` keyed to UTC-day boundaries) → `BotDetector`/`UserAgentClassifier`/`LanguageResolver`/`CountryResolver` (coarse, non-identifying metadata only) → `AbuseMonitor` + `RequestRateLimiter` (both Redis-backed, `clearstats:`-namespaced) → `EventQueue::push()` (LPUSH onto `clearstats:events`). Raw IP/UA never leave `EventController`'s local scope.
+
+**The queue worker** (`bin/queue-worker.php` → `QueueWorker`) uses `EventQueue::reserve()` (`RPOPLPUSH events -> events:processing`), not plain `LPOP` — a payload sits in the processing list until `acknowledge()` removes it, so a crashed/killed worker doesn't lose events; the next run's `recoverProcessing()` puts anything still in `events:processing` back on the main queue. Unparseable/invalid payloads go through `discard()`, which stores only a SHA-256 fingerprint + reason in `clearstats:events:rejected` (capped at 1000), never the payload itself — event bodies can carry operator-supplied strings (`url_path`, campaign fields) that shouldn't outlive `raw_event_retention_days`. Takes a file lock (`/tmp/clearstats-queue-worker.lock`) so cron can overlap invocations safely; a locked-out run exits 0, not an error.
+
+**The rollup job** (`bin/rollup.php` → `StatsRollup::aggregateDay()`) is idempotent per `(site_id, date)` — it deletes then re-inserts that day's rows in every `daily_*_stats` table before recomputing, so re-running a date is always safe. It reads only from `events_raw`; the dashboard (`DashboardQuery`) reads only from the `daily_*_stats` tables — raw events and the dashboard never touch directly. `StatsRollup` also purges rows past each site's `raw_event_retention_days` in the same run.
 
 ## Decisions already made (don't re-litigate without flagging why)
 
