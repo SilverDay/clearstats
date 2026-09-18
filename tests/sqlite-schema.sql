@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS sites (
     trusted_proxy_config TEXT,
     raw_event_retention_days INTEGER NOT NULL DEFAULT 30,
     active INTEGER NOT NULL DEFAULT 1,
+    track_outbound_links INTEGER NOT NULL DEFAULT 0,
+    track_file_downloads INTEGER NOT NULL DEFAULT 0,
+    track_404 INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS users (

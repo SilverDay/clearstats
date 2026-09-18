@@ -47,6 +47,36 @@ final class SiteRepositoryTest extends TestCase
         }
     }
 
+    public function testCreateAndUpdatePersistTrackingOptions(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $email = 'site-tracking-' . bin2hex(random_bytes(6)) . '@example.test';
+        $statement = $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (:email, :password_hash, :role)');
+        $statement->execute(['email' => $email, 'password_hash' => 'not-used', 'role' => 'admin']);
+        $userId = (string) $pdo->lastInsertId();
+
+        $repository = new SiteRepository($pdo);
+        $site = $repository->create('Tracking site', 'tracking.example.test', $userId, 'direct', 30, true, false, true);
+
+        try {
+            $stored = $repository->findForAdmin($userId, $site['id']);
+            $this->assertSame('1', (string) $stored['track_outbound_links']);
+            $this->assertSame('0', (string) $stored['track_file_downloads']);
+            $this->assertSame('1', (string) $stored['track_404']);
+
+            $repository->update($userId, $site['id'], 'Tracking site', 'tracking.example.test', 'direct', 30, true, false, true, false);
+            $updated = $repository->findForAdmin($userId, $site['id']);
+            $this->assertSame('0', (string) $updated['track_outbound_links']);
+            $this->assertSame('1', (string) $updated['track_file_downloads']);
+            $this->assertSame('0', (string) $updated['track_404']);
+        } finally {
+            $pdo->prepare('DELETE FROM user_site_access WHERE site_id = :site_id')->execute(['site_id' => $site['id']]);
+            $pdo->prepare('DELETE FROM sites WHERE id = :site_id')->execute(['site_id' => $site['id']]);
+            $pdo->prepare('DELETE FROM users WHERE id = :user_id')->execute(['user_id' => $userId]);
+        }
+    }
+
     public function testNonAdminCannotCreateSite(): void
     {
         $database = TestDatabase::create();

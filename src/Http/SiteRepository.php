@@ -23,7 +23,8 @@ final class SiteRepository
     public function forUser(string $userId): array
     {
         $statement = $this->pdo->prepare(
-            'SELECT s.id, s.name, s.domain, s.ip_source, s.raw_event_retention_days, s.active, usa.role
+            'SELECT s.id, s.name, s.domain, s.ip_source, s.raw_event_retention_days, s.active,
+                    s.track_outbound_links, s.track_file_downloads, s.track_404, usa.role
              FROM sites s
              INNER JOIN user_site_access usa ON usa.site_id = s.id
              WHERE usa.user_id = :user_id
@@ -43,6 +44,9 @@ final class SiteRepository
         string $ownerUserId,
         string $ipSource = 'direct',
         int $retentionDays = 30,
+        bool $trackOutboundLinks = false,
+        bool $trackFileDownloads = false,
+        bool $track404 = false,
     ): array {
         if (!$this->isAdmin($ownerUserId)) {
             throw new RuntimeException('Only administrators can create sites.');
@@ -68,8 +72,8 @@ final class SiteRepository
         $this->pdo->beginTransaction();
         try {
             $site = $this->pdo->prepare(
-                'INSERT INTO sites (id, name, domain, owner_user_id, ip_source, raw_event_retention_days)
-                 VALUES (:id, :name, :domain, :owner_user_id, :ip_source, :retention_days)',
+                'INSERT INTO sites (id, name, domain, owner_user_id, ip_source, raw_event_retention_days, track_outbound_links, track_file_downloads, track_404)
+                 VALUES (:id, :name, :domain, :owner_user_id, :ip_source, :retention_days, :track_outbound_links, :track_file_downloads, :track_404)',
             );
             $site->execute([
                 'id' => $siteId,
@@ -78,6 +82,9 @@ final class SiteRepository
                 'owner_user_id' => $ownerUserId,
                 'ip_source' => $ipSource,
                 'retention_days' => $retentionDays,
+                'track_outbound_links' => $trackOutboundLinks ? 1 : 0,
+                'track_file_downloads' => $trackFileDownloads ? 1 : 0,
+                'track_404' => $track404 ? 1 : 0,
             ]);
 
             $access = $this->pdo->prepare(
@@ -117,7 +124,8 @@ final class SiteRepository
         }
 
         $statement = $this->pdo->prepare(
-            'SELECT s.id, s.name, s.domain, s.ip_source, s.raw_event_retention_days, s.active
+            'SELECT s.id, s.name, s.domain, s.ip_source, s.raw_event_retention_days, s.active,
+                    s.track_outbound_links, s.track_file_downloads, s.track_404
              FROM sites s
              INNER JOIN user_site_access usa ON usa.site_id = s.id
              WHERE s.id = :site_id AND usa.user_id = :user_id AND usa.role = \'admin\'
@@ -137,6 +145,9 @@ final class SiteRepository
         string $ipSource,
         int $retentionDays,
         bool $active,
+        bool $trackOutboundLinks = false,
+        bool $trackFileDownloads = false,
+        bool $track404 = false,
     ): void {
         if ($this->findForAdmin($actingUserId, $siteId) === null) {
             throw new RuntimeException('Only site administrators can edit this site.');
@@ -157,7 +168,8 @@ final class SiteRepository
         $statement = $this->pdo->prepare(
             'UPDATE sites
              SET name = :name, domain = :domain, ip_source = :ip_source,
-                 raw_event_retention_days = :retention_days, active = :active
+                 raw_event_retention_days = :retention_days, active = :active,
+                 track_outbound_links = :track_outbound_links, track_file_downloads = :track_file_downloads, track_404 = :track_404
              WHERE id = :site_id',
         );
         $statement->execute([
@@ -166,6 +178,9 @@ final class SiteRepository
             'ip_source' => $ipSource,
             'retention_days' => $retentionDays,
             'active' => $active ? 1 : 0,
+            'track_outbound_links' => $trackOutboundLinks ? 1 : 0,
+            'track_file_downloads' => $trackFileDownloads ? 1 : 0,
+            'track_404' => $track404 ? 1 : 0,
             'site_id' => $siteId,
         ]);
     }

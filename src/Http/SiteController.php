@@ -63,16 +63,35 @@ final class SiteController
         if ($createdSite !== null) {
             $scheme = ($_SERVER['HTTPS'] ?? '') !== '' && strtolower((string) $_SERVER['HTTPS']) !== 'off' ? 'https' : 'http';
             $scriptUrl = $scheme . '://' . (string) ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/js/track.js';
+            $siteIdAttr = htmlspecialchars((string) $createdSite['id'], ENT_QUOTES, 'UTF-8');
+            $scriptUrlAttr = htmlspecialchars($scriptUrl, ENT_QUOTES, 'UTF-8');
             $snippet = sprintf(
-                '<script defer data-site-id="%s" src="%s"></script>',
-                htmlspecialchars((string) $createdSite['id'], ENT_QUOTES, 'UTF-8'),
-                htmlspecialchars($scriptUrl, ENT_QUOTES, 'UTF-8'),
+                '<script defer data-site-id="%s"%s src="%s"></script>',
+                $siteIdAttr,
+                $this->trackingAttributes($createdSite),
+                $scriptUrlAttr,
             );
+
+            $notFoundBlock = '';
+            if ((int) ($createdSite['track_404'] ?? 0) === 1) {
+                $notFoundSnippet = sprintf(
+                    '<script defer data-site-id="%s"%s src="%s"></script>',
+                    $siteIdAttr,
+                    $this->trackingAttributes404($createdSite),
+                    $scriptUrlAttr,
+                );
+                $notFoundBlock = sprintf(
+                    '<p>404 tracking is enabled for this site. Add this <strong>separate</strong> snippet only on your actual 404/error page — not the snippet above, and not site-wide, or every normal page would wrongly count as a 404:</p><pre><code>%s</code></pre>',
+                    htmlspecialchars($notFoundSnippet, ENT_QUOTES, 'UTF-8'),
+                );
+            }
+
             $installPanel = sprintf(
-                '<section class="install-panel"><h2>Connect %s</h2><p>Add this script before the closing <code>&lt;/body&gt;</code> tag on <strong>%s</strong>.</p><pre><code>%s</code></pre><p>The script sends one privacy-safe pageview and supports SPA route changes without cookies or browser storage.</p></section>',
+                '<section class="install-panel"><h2>Connect %s</h2><p>Add this script before the closing <code>&lt;/body&gt;</code> tag on <strong>%s</strong>.</p><pre><code>%s</code></pre><p>The script sends one privacy-safe pageview and supports SPA route changes without cookies or browser storage.</p>%s</section>',
                 htmlspecialchars((string) $createdSite['name'], ENT_QUOTES, 'UTF-8'),
                 htmlspecialchars((string) $createdSite['domain'], ENT_QUOTES, 'UTF-8'),
                 htmlspecialchars($snippet, ENT_QUOTES, 'UTF-8'),
+                $notFoundBlock,
             );
         }
 
@@ -143,6 +162,9 @@ HTML;
                     (string) ($_POST['ip_source'] ?? 'direct'),
                     (int) ($_POST['retention'] ?? 30),
                     isset($_POST['active']),
+                    isset($_POST['track_outbound_links']),
+                    isset($_POST['track_file_downloads']),
+                    isset($_POST['track_404']),
                 );
                 header('Location: /sites');
                 exit;
@@ -152,6 +174,9 @@ HTML;
         }
 
         $checked = ((int) ($site['active'] ?? 0) === 1) ? ' checked' : '';
+        $outboundChecked = ((int) ($site['track_outbound_links'] ?? 0) === 1) ? ' checked' : '';
+        $downloadsChecked = ((int) ($site['track_file_downloads'] ?? 0) === 1) ? ' checked' : '';
+        $notFoundChecked = ((int) ($site['track_404'] ?? 0) === 1) ? ' checked' : '';
         $name = htmlspecialchars((string) $site['name'], ENT_QUOTES, 'UTF-8');
         $domain = htmlspecialchars((string) $site['domain'], ENT_QUOTES, 'UTF-8');
         $retention = htmlspecialchars((string) $site['raw_event_retention_days'], ENT_QUOTES, 'UTF-8');
@@ -184,6 +209,12 @@ HTML;
                     <label><span>Raw retention (days)</span><input type="number" name="retention" value="%s" min="1" max="3650" required></label>
                 </div>
                 <label class="checkbox"><input type="checkbox" name="active" value="1"%s> Active</label>
+                <div class="field">
+                    <span>Optional tracking (see docs/tracking-guide.md)</span>
+                    <label class="checkbox"><input type="checkbox" name="track_outbound_links" value="1"%s> Outbound link clicks</label>
+                    <label class="checkbox"><input type="checkbox" name="track_file_downloads" value="1"%s> File download clicks</label>
+                    <label class="checkbox"><input type="checkbox" name="track_404" value="1"%s> 404 error tracking (needs a separate snippet on your 404 page)</label>
+                </div>
                 <div class="form-actions">
                     <a class="btn" href="/sites">Cancel</a>
                     <button class="btn btn-primary" type="submit">Save changes</button>
@@ -203,6 +234,9 @@ HTML,
             $ipSource === 'cf-connecting-ip' ? ' selected' : '',
             $retention,
             $checked,
+            $outboundChecked,
+            $downloadsChecked,
+            $notFoundChecked,
         );
     }
 
@@ -254,6 +288,9 @@ HTML,
                     $userId,
                     (string) ($_POST['ip_source'] ?? 'direct'),
                     (int) ($_POST['retention'] ?? 30),
+                    isset($_POST['track_outbound_links']),
+                    isset($_POST['track_file_downloads']),
+                    isset($_POST['track_404']),
                 );
                 header('Location: /sites?created=' . rawurlencode((string) $createdSite['id']));
                 exit;
@@ -287,6 +324,12 @@ HTML,
                     <label><span>IP source</span><select name="ip_source"><option value="direct">direct</option><option value="x-forwarded-for">x-forwarded-for</option><option value="cf-connecting-ip">cf-connecting-ip</option></select></label>
                     <label><span>Raw retention (days)</span><input type="number" name="retention" value="30" min="1" max="3650" required></label>
                 </div>
+                <div class="field">
+                    <span>Optional tracking (see docs/tracking-guide.md)</span>
+                    <label class="checkbox"><input type="checkbox" name="track_outbound_links" value="1"> Outbound link clicks</label>
+                    <label class="checkbox"><input type="checkbox" name="track_file_downloads" value="1"> File download clicks</label>
+                    <label class="checkbox"><input type="checkbox" name="track_404" value="1"> 404 error tracking (needs a separate snippet on your 404 page — shown after saving)</label>
+                </div>
                 <div class="form-actions">
                     <a class="btn" href="/sites">Cancel</a>
                     <button class="btn btn-primary" type="submit">Save site</button>
@@ -297,5 +340,35 @@ HTML,
 </body>
 </html>
 HTML);
+    }
+
+    /**
+     * The site-wide install snippet's data-* attributes for this site's
+     * stored tracking-feature choices — see docs/tracking-guide.md.
+     * data-404 is deliberately excluded here: unlike outbound-links/
+     * file-downloads (safe on every page), it must only ever appear on the
+     * site's actual 404 page, or every normal page load would wrongly fire
+     * a 404 event. See trackingAttributes404() for that separate snippet.
+     *
+     * @param array<string, mixed> $site
+     */
+    private function trackingAttributes(array $site): string
+    {
+        $attributes = [
+            'data-outbound-links' => (int) ($site['track_outbound_links'] ?? 0) === 1,
+            'data-file-downloads' => (int) ($site['track_file_downloads'] ?? 0) === 1,
+        ];
+
+        $enabled = array_keys(array_filter($attributes));
+
+        return $enabled === [] ? '' : ' ' . implode(' ', $enabled);
+    }
+
+    /**
+     * @param array<string, mixed> $site
+     */
+    private function trackingAttributes404(array $site): string
+    {
+        return (int) ($site['track_404'] ?? 0) === 1 ? ' data-404' : '';
     }
 }
