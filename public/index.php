@@ -184,6 +184,7 @@ $controller = match ($controllerClass) {
         new ClearStats\Ingestion\CountryResolver(
             $config['ingestion']['trusted_proxy_ips'] ?? [],
             $config['geoip']['country_database_path'] ?? null,
+            $config['geoip']['city_database_path'] ?? null,
         ),
         new ClearStats\Ingestion\UserAgentClassifier(),
         new ClearStats\Ingestion\LanguageResolver(),

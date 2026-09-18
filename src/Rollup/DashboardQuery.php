@@ -238,6 +238,98 @@ final class DashboardQuery
         return $statement->fetchAll();
     }
 
+    /** @param list<string> $siteIds */
+    public function portfolioTopCampaignTerms(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_campaign_term_stats', 'campaign_term', 'visits', 'campaign_term', 'visits', $siteIds, $endDate, $limit, $startDate);
+    }
+
+    /** @param list<string> $siteIds */
+    public function portfolioTopCampaignContent(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        return $this->portfolioDimensionRows('daily_campaign_content_stats', 'campaign_content', 'visits', 'campaign_content', 'visits', $siteIds, $endDate, $limit, $startDate);
+    }
+
+    /**
+     * @param list<string> $siteIds
+     * @return list<array{country_code: string, region: string, visits: int}>
+     */
+    public function portfolioTopRegions(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        if ($siteIds === []) return [];
+        $startDate ??= $endDate;
+        $params = ['start_date' => $startDate, 'end_date' => $endDate];
+        $in = $this->inClause($siteIds, $params, 'site');
+        $statement = $this->database->pdo()->prepare(
+            "SELECT country_code, region, SUM(visits) AS visits
+             FROM daily_region_stats
+             WHERE date BETWEEN :start_date AND :end_date AND site_id IN ({$in})
+             GROUP BY country_code, region
+             ORDER BY visits DESC, country_code ASC, region ASC
+             LIMIT :limit",
+        );
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        foreach ($params as $key => $value) $statement->bindValue(':' . $key, $value, \PDO::PARAM_STR);
+        $statement->execute();
+
+        return array_map(static fn(array $row): array => ['country_code' => (string) $row['country_code'], 'region' => (string) $row['region'], 'visits' => (int) $row['visits']], $statement->fetchAll());
+    }
+
+    /**
+     * @param list<string> $siteIds
+     * @return list<array{country_code: string, city: string, visits: int}>
+     */
+    public function portfolioTopCities(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        if ($siteIds === []) return [];
+        $startDate ??= $endDate;
+        $params = ['start_date' => $startDate, 'end_date' => $endDate];
+        $in = $this->inClause($siteIds, $params, 'site');
+        $statement = $this->database->pdo()->prepare(
+            "SELECT country_code, city, SUM(visits) AS visits
+             FROM daily_city_stats
+             WHERE date BETWEEN :start_date AND :end_date AND site_id IN ({$in})
+             GROUP BY country_code, city
+             ORDER BY visits DESC, city ASC
+             LIMIT :limit",
+        );
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        foreach ($params as $key => $value) $statement->bindValue(':' . $key, $value, \PDO::PARAM_STR);
+        $statement->execute();
+
+        return array_map(static fn(array $row): array => ['country_code' => (string) $row['country_code'], 'city' => (string) $row['city'], 'visits' => (int) $row['visits']], $statement->fetchAll());
+    }
+
+    /**
+     * @param list<string> $siteIds
+     * @return list<array{event_name: string, currency: string, conversions: int, revenue_total: float}>
+     */
+    public function portfolioRevenue(array $siteIds, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        if ($siteIds === []) return [];
+        $startDate ??= $endDate;
+        $params = ['start_date' => $startDate, 'end_date' => $endDate];
+        $in = $this->inClause($siteIds, $params, 'site');
+        $statement = $this->database->pdo()->prepare(
+            "SELECT event_name, currency, SUM(conversions) AS conversions, SUM(revenue_total) AS revenue_total
+             FROM daily_revenue_stats
+             WHERE date BETWEEN :start_date AND :end_date AND site_id IN ({$in})
+             GROUP BY event_name, currency
+             ORDER BY revenue_total DESC
+             LIMIT :limit",
+        );
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        foreach ($params as $key => $value) $statement->bindValue(':' . $key, $value, \PDO::PARAM_STR);
+        $statement->execute();
+
+        return array_map(static fn(array $row): array => [
+            'event_name' => (string) $row['event_name'],
+            'currency' => (string) $row['currency'],
+            'conversions' => (int) $row['conversions'],
+            'revenue_total' => (float) $row['revenue_total'],
+        ], $statement->fetchAll());
+    }
+
     private function portfolioDimensionRows(string $table, string $column, string $countColumn, string $outputColumn, string $outputCount, array $siteIds, string $endDate, int $limit, ?string $startDate = null): array
     {
         $startDate ??= $endDate;
@@ -388,6 +480,90 @@ final class DashboardQuery
         return $statement->fetchAll();
     }
 
+    public function topCampaignTerms(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        return $this->dimensionRows('daily_campaign_term_stats', 'campaign_term', 'campaign_term', $siteId, $endDate, $limit, $startDate);
+    }
+
+    public function topCampaignContent(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        return $this->dimensionRows('daily_campaign_content_stats', 'campaign_content', 'campaign_content', $siteId, $endDate, $limit, $startDate);
+    }
+
+    /**
+     * @return list<array{country_code: string, region: string, visits: int}>
+     */
+    public function topRegions(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        $startDate ??= $endDate;
+        $statement = $this->database->pdo()->prepare(
+            'SELECT country_code, region, SUM(visits) AS visits
+             FROM daily_region_stats
+             WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date
+             GROUP BY country_code, region
+             ORDER BY visits DESC, country_code ASC, region ASC
+             LIMIT :limit',
+        );
+        $statement->bindValue(':site_id', $siteId, \PDO::PARAM_STR);
+        $statement->bindValue(':start_date', $startDate, \PDO::PARAM_STR);
+        $statement->bindValue(':end_date', $endDate, \PDO::PARAM_STR);
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        $statement->execute();
+
+        return array_map(static fn(array $row): array => ['country_code' => (string) $row['country_code'], 'region' => (string) $row['region'], 'visits' => (int) $row['visits']], $statement->fetchAll());
+    }
+
+    /**
+     * @return list<array{country_code: string, city: string, visits: int}>
+     */
+    public function topCities(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        $startDate ??= $endDate;
+        $statement = $this->database->pdo()->prepare(
+            'SELECT country_code, city, SUM(visits) AS visits
+             FROM daily_city_stats
+             WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date
+             GROUP BY country_code, city
+             ORDER BY visits DESC, city ASC
+             LIMIT :limit',
+        );
+        $statement->bindValue(':site_id', $siteId, \PDO::PARAM_STR);
+        $statement->bindValue(':start_date', $startDate, \PDO::PARAM_STR);
+        $statement->bindValue(':end_date', $endDate, \PDO::PARAM_STR);
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        $statement->execute();
+
+        return array_map(static fn(array $row): array => ['country_code' => (string) $row['country_code'], 'city' => (string) $row['city'], 'visits' => (int) $row['visits']], $statement->fetchAll());
+    }
+
+    /**
+     * @return list<array{event_name: string, currency: string, conversions: int, revenue_total: float}>
+     */
+    public function revenueByGoal(string $siteId, string $endDate, int $limit = 10, ?string $startDate = null): array
+    {
+        $startDate ??= $endDate;
+        $statement = $this->database->pdo()->prepare(
+            'SELECT event_name, currency, SUM(conversions) AS conversions, SUM(revenue_total) AS revenue_total
+             FROM daily_revenue_stats
+             WHERE site_id = :site_id AND date BETWEEN :start_date AND :end_date
+             GROUP BY event_name, currency
+             ORDER BY revenue_total DESC
+             LIMIT :limit',
+        );
+        $statement->bindValue(':site_id', $siteId, \PDO::PARAM_STR);
+        $statement->bindValue(':start_date', $startDate, \PDO::PARAM_STR);
+        $statement->bindValue(':end_date', $endDate, \PDO::PARAM_STR);
+        $statement->bindValue(':limit', max(1, $limit), \PDO::PARAM_INT);
+        $statement->execute();
+
+        return array_map(static fn(array $row): array => [
+            'event_name' => (string) $row['event_name'],
+            'currency' => (string) $row['currency'],
+            'conversions' => (int) $row['conversions'],
+            'revenue_total' => (float) $row['revenue_total'],
+        ], $statement->fetchAll());
+    }
+
     private function dimensionRows(string $table, string $column, string $outputColumn, string $siteId, string $endDate, int $limit, ?string $startDate = null): array
     {
         $allowed = [
@@ -396,6 +572,8 @@ final class DashboardQuery
             'daily_device_stats' => 'device_type',
             'daily_os_stats' => 'operating_system',
             'daily_language_stats' => 'language_code',
+            'daily_campaign_term_stats' => 'campaign_term',
+            'daily_campaign_content_stats' => 'campaign_content',
         ];
         if (($allowed[$table] ?? null) !== $column) {
             return [];

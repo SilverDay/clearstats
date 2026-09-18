@@ -47,6 +47,11 @@ final class DashboardController
         $languageRows = $this->emptyRow('No language data for this period.');
         $eventRows = $this->emptyRow('No conversion events for this period.');
         $campaignRows = $this->emptyRow('No campaign data for this period.');
+        $regionRows = $this->emptyRow('No region data for this period.');
+        $cityRows = $this->emptyRow('No city data for this period.');
+        $campaignTermRows = $this->emptyRow('No campaign term data for this period.');
+        $campaignContentRows = $this->emptyRow('No campaign content data for this period.');
+        $revenueRows = $this->emptyRow('No revenue data for this period.', 4);
         $siteOptions = '<option value="">No assigned sites</option>';
         $selectedSiteLabel = 'No site selected';
 
@@ -103,6 +108,11 @@ final class DashboardController
                 $languageRows = $this->formatRows($this->query->portfolioLanguages($siteIds, $endDate, $startDate), 'language_code');
                 $eventRows = $this->formatRows($this->query->portfolioTopEvents($siteIds, $endDate, 5, $startDate), 'event_name', 'events');
                 $campaignRows = $this->formatCampaignRows($this->query->portfolioCampaigns($siteIds, $endDate, 5, $startDate));
+                $regionRows = $this->formatRegionRows($this->query->portfolioTopRegions($siteIds, $endDate, 5, $startDate));
+                $cityRows = $this->formatCityRows($this->query->portfolioTopCities($siteIds, $endDate, 5, $startDate));
+                $campaignTermRows = $this->formatRows($this->query->portfolioTopCampaignTerms($siteIds, $endDate, 5, $startDate), 'campaign_term');
+                $campaignContentRows = $this->formatRows($this->query->portfolioTopCampaignContent($siteIds, $endDate, 5, $startDate), 'campaign_content');
+                $revenueRows = $this->formatRevenueRows($this->query->portfolioRevenue($siteIds, $endDate, 5, $startDate));
             } elseif ($selectedSite !== null) {
                 $selectedSiteLabel = (string) $selectedSite['name'];
                 $overview = $this->query->overview($selectedSiteId, $endDate, $startDate);
@@ -124,6 +134,11 @@ final class DashboardController
                 $languageRows = $this->formatRows($this->query->languages($selectedSiteId, $endDate, $startDate), 'language_code');
                 $eventRows = $this->formatRows($this->query->topEvents($selectedSiteId, $endDate, 5, $startDate), 'event_name', 'events');
                 $campaignRows = $this->formatCampaignRows($this->query->campaigns($selectedSiteId, $endDate, 5, $startDate));
+                $regionRows = $this->formatRegionRows($this->query->topRegions($selectedSiteId, $endDate, 5, $startDate));
+                $cityRows = $this->formatCityRows($this->query->topCities($selectedSiteId, $endDate, 5, $startDate));
+                $campaignTermRows = $this->formatRows($this->query->topCampaignTerms($selectedSiteId, $endDate, 5, $startDate), 'campaign_term');
+                $campaignContentRows = $this->formatRows($this->query->topCampaignContent($selectedSiteId, $endDate, 5, $startDate), 'campaign_content');
+                $revenueRows = $this->formatRevenueRows($this->query->revenueByGoal($selectedSiteId, $endDate, 5, $startDate));
             }
         }
 
@@ -217,6 +232,23 @@ final class DashboardController
                 </section>
             </div>
 
+            <div class="grid grid-2">
+                <section class="card">
+                    <h2 class="card-title">Regions</h2>
+                    <div class="table-wrap"><table class="table">
+                        <thead><tr><th>Region</th><th>Visits</th></tr></thead>
+                        <tbody>{{REGIONS}}</tbody>
+                    </table></div>
+                </section>
+                <section class="card">
+                    <h2 class="card-title">Cities</h2>
+                    <div class="table-wrap"><table class="table">
+                        <thead><tr><th>City</th><th>Visits</th></tr></thead>
+                        <tbody>{{CITIES}}</tbody>
+                    </table></div>
+                </section>
+            </div>
+
             <section class="card">
                 <h2 class="card-title">Devices</h2>
                 <div class="table-wrap"><table class="table">
@@ -258,6 +290,31 @@ final class DashboardController
                     </table></div>
                 </section>
             </div>
+
+            <div class="grid grid-2">
+                <section class="card">
+                    <h2 class="card-title">Campaign term (UTM)</h2>
+                    <div class="table-wrap"><table class="table">
+                        <thead><tr><th>Term</th><th>Visits</th></tr></thead>
+                        <tbody>{{CAMPAIGN_TERMS}}</tbody>
+                    </table></div>
+                </section>
+                <section class="card">
+                    <h2 class="card-title">Campaign content (UTM)</h2>
+                    <div class="table-wrap"><table class="table">
+                        <thead><tr><th>Content</th><th>Visits</th></tr></thead>
+                        <tbody>{{CAMPAIGN_CONTENT}}</tbody>
+                    </table></div>
+                </section>
+            </div>
+
+            <section class="card">
+                <h2 class="card-title">Revenue</h2>
+                <div class="table-wrap"><table class="table table-fixed">
+                    <thead><tr><th>Goal</th><th>Currency</th><th>Conversions</th><th>Revenue</th></tr></thead>
+                    <tbody>{{REVENUE}}</tbody>
+                </table></div>
+            </section>
         </div>
 
         <p class="page-note">Privacy note: ClearStats reports aggregate traffic and does not identify new versus returning visitors.</p>
@@ -267,8 +324,8 @@ final class DashboardController
 HTML;
 
         echo str_replace(
-            ['{{PAGEVIEWS}}', '{{VISITORS}}', '{{SESSIONS}}', '{{BOUNCE_RATE}}', '{{ENGAGEMENT}}', '{{TOP_PAGES}}', '{{REFERRERS}}', '{{COUNTRIES}}', '{{DEVICES}}', '{{OS}}', '{{LANGUAGES}}', '{{EVENTS}}', '{{CAMPAIGNS}}', '{{RANGE_LABEL}}', '{{CHART_BARS}}', '{{CHART_AXIS}}', '{{SITE_OPTIONS}}', '{{SELECTED_SITE}}', '{{RANGE_PICKER}}', '{{RANGE}}'],
-            [$pageviews, $visitors, $sessions, $bounceRate, $engagement, $topPageRows, $referrerRows, $countryRows, $deviceRows, $osRows, $languageRows, $eventRows, $campaignRows, htmlspecialchars($rangeLabel, ENT_QUOTES, 'UTF-8'), $chartBars, $chartAxis, $siteOptions, htmlspecialchars($selectedSiteLabel, ENT_QUOTES, 'UTF-8'), $rangePicker, htmlspecialchars($range, ENT_QUOTES, 'UTF-8')],
+            ['{{PAGEVIEWS}}', '{{VISITORS}}', '{{SESSIONS}}', '{{BOUNCE_RATE}}', '{{ENGAGEMENT}}', '{{TOP_PAGES}}', '{{REFERRERS}}', '{{COUNTRIES}}', '{{REGIONS}}', '{{CITIES}}', '{{DEVICES}}', '{{OS}}', '{{LANGUAGES}}', '{{EVENTS}}', '{{CAMPAIGNS}}', '{{CAMPAIGN_TERMS}}', '{{CAMPAIGN_CONTENT}}', '{{REVENUE}}', '{{RANGE_LABEL}}', '{{CHART_BARS}}', '{{CHART_AXIS}}', '{{SITE_OPTIONS}}', '{{SELECTED_SITE}}', '{{RANGE_PICKER}}', '{{RANGE}}'],
+            [$pageviews, $visitors, $sessions, $bounceRate, $engagement, $topPageRows, $referrerRows, $countryRows, $regionRows, $cityRows, $deviceRows, $osRows, $languageRows, $eventRows, $campaignRows, $campaignTermRows, $campaignContentRows, $revenueRows, htmlspecialchars($rangeLabel, ENT_QUOTES, 'UTF-8'), $chartBars, $chartAxis, $siteOptions, htmlspecialchars($selectedSiteLabel, ENT_QUOTES, 'UTF-8'), $rangePicker, htmlspecialchars($range, ENT_QUOTES, 'UTF-8')],
             $html,
         );
     }
@@ -485,6 +542,58 @@ HTML;
                 $label,
                 $label,
                 number_format($count),
+            );
+        }
+
+        return $html;
+    }
+
+    /**
+     * @param list<array{country_code: string, region: string, visits: int}> $rows
+     */
+    private function formatRegionRows(array $rows): string
+    {
+        $labeled = array_map(static fn(array $row): array => [
+            'label' => $row['country_code'] . '-' . $row['region'],
+            'visits' => $row['visits'],
+        ], $rows);
+
+        return $this->formatRows($labeled, 'label');
+    }
+
+    /**
+     * @param list<array{country_code: string, city: string, visits: int}> $rows
+     */
+    private function formatCityRows(array $rows): string
+    {
+        $labeled = array_map(static fn(array $row): array => [
+            'label' => $row['city'] . ', ' . $row['country_code'],
+            'visits' => $row['visits'],
+        ], $rows);
+
+        return $this->formatRows($labeled, 'label');
+    }
+
+    /**
+     * @param list<array{event_name: string, currency: string, conversions: int, revenue_total: float}> $rows
+     */
+    private function formatRevenueRows(array $rows): string
+    {
+        if ($rows === []) {
+            return $this->emptyRow('No revenue data for this period.', 4);
+        }
+
+        $max = max(1, ...array_map(static fn(array $row): float => $row['revenue_total'], $rows));
+        $html = '';
+        foreach ($rows as $row) {
+            $goal = htmlspecialchars($row['event_name'], ENT_QUOTES, 'UTF-8');
+            $html .= sprintf(
+                '<tr><td style="%s">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
+                $this->barStyle((int) round($row['revenue_total']), (int) round($max)),
+                $goal,
+                htmlspecialchars($row['currency'], ENT_QUOTES, 'UTF-8'),
+                number_format($row['conversions']),
+                number_format($row['revenue_total'], 2),
             );
         }
 

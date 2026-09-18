@@ -30,4 +30,27 @@ final class TrackScriptTest extends TestCase
         $this->assertStringContainsString('history.replaceState', $script);
         $this->assertStringContainsString("addEventListener('popstate'", $script);
     }
+
+    public function testOutboundLinksFileDownloadsAnd404TrackingAreOptIn(): void
+    {
+        $script = file_get_contents(__DIR__ . '/../../public/js/track.js');
+        $this->assertNotFalse($script);
+
+        $this->assertStringContainsString("hasAttribute('data-outbound-links')", $script);
+        $this->assertStringContainsString("hasAttribute('data-file-downloads')", $script);
+        $this->assertStringContainsString("hasAttribute('data-404')", $script);
+
+        // Detection code must sit behind the opt-in flags, not fire
+        // unconditionally just because track.js was upgraded.
+        $this->assertMatchesRegularExpression(
+            '/if\s*\(trackOutboundLinks \|\| trackFileDownloads\)\s*\{/',
+            $script,
+            'Outbound-link/file-download click tracking must be gated behind the opt-in flags.',
+        );
+        $this->assertMatchesRegularExpression(
+            '/if\s*\(trackNotFound\)\s*\{/',
+            $script,
+            '404 tracking must be gated behind the opt-in flag.',
+        );
+    }
 }

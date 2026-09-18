@@ -20,7 +20,7 @@ final class StatsRollup
     {
         $pdo = $this->database->pdo();
 
-        foreach (['daily_page_stats', 'daily_referrer_stats', 'daily_country_stats', 'daily_device_stats', 'daily_os_stats', 'daily_language_stats', 'daily_event_stats', 'daily_campaign_stats'] as $table) {
+        foreach (['daily_page_stats', 'daily_referrer_stats', 'daily_country_stats', 'daily_device_stats', 'daily_os_stats', 'daily_language_stats', 'daily_event_stats', 'daily_campaign_stats', 'daily_campaign_term_stats', 'daily_campaign_content_stats', 'daily_region_stats', 'daily_city_stats', 'daily_revenue_stats'] as $table) {
             $clear = $pdo->prepare("DELETE FROM {$table} WHERE site_id = :site_id AND date = :date");
             $clear->execute(['site_id' => $siteId, 'date' => $date]);
         }
@@ -156,10 +156,15 @@ final class StatsRollup
         ];
         foreach ($dimensions as $dimension) {
             $column = $dimension['column'];
+            // event_type = 'pageview', same reasoning as daily_page_stats above:
+            // events_raw also carries 'custom' and 'session_end' rows sharing the
+            // same country/device/os/language/referrer as their session's
+            // pageview(s), which would otherwise count a session multiple times
+            // per event instead of once per pageview.
             $grouped = $pdo->prepare(
                 "SELECT {$column} AS dimension_value, COUNT(*) AS visits
                  FROM events_raw
-                 WHERE site_id = :site_id AND DATE(created_at) = :date
+                 WHERE site_id = :site_id AND DATE(created_at) = :date AND event_type = 'pageview'
                    AND {$column} IS NOT NULL AND {$column} <> ''
                  GROUP BY {$column}",
             );
@@ -213,6 +218,69 @@ final class StatsRollup
                 'medium' => (string) ($row['campaign_medium'] ?? ''),
                 'name' => (string) ($row['campaign_name'] ?? ''),
                 'visits' => (int) $row['visits'],
+            ]);
+        }
+
+        // Same event_type = 'pageview' scope as the source/medium/name rollup
+        // above — UTM term/content are page-view attribution, not counted
+        // across every event type the way country/device/os/language are.
+        foreach (['campaign_term' => 'daily_campaign_term_stats', 'campaign_content' => 'daily_campaign_content_stats'] as $column => $table) {
+            $stats = $pdo->prepare(
+                "SELECT {$column} AS value, COUNT(*) AS visits FROM events_raw
+                 WHERE site_id = :site_id AND DATE(created_at) = :date AND event_type = 'pageview'
+                   AND {$column} IS NOT NULL AND {$column} <> ''
+                 GROUP BY {$column}",
+            );
+            $stats->execute(['site_id' => $siteId, 'date' => $date]);
+            while (($row = $stats->fetch()) !== false) {
+                $pdo->prepare("INSERT INTO {$table} (site_id, date, {$column}, visits) VALUES (:site_id, :date, :value, :visits)")->execute([
+                    'site_id' => $siteId,
+                    'date' => $date,
+                    'value' => (string) $row['value'],
+                    'visits' => (int) $row['visits'],
+                ]);
+            }
+        }
+
+        // Same event_type = 'pageview' scope as country_code above, so a
+        // country's total lines up with the sum of its regions/cities.
+        foreach (['region' => 'daily_region_stats', 'city' => 'daily_city_stats'] as $column => $table) {
+            $stats = $pdo->prepare(
+                "SELECT country_code, {$column} AS value, COUNT(*) AS visits FROM events_raw
+                 WHERE site_id = :site_id AND DATE(created_at) = :date AND event_type = 'pageview'
+                   AND country_code IS NOT NULL AND country_code <> ''
+                   AND {$column} IS NOT NULL AND {$column} <> ''
+                 GROUP BY country_code, {$column}",
+            );
+            $stats->execute(['site_id' => $siteId, 'date' => $date]);
+            while (($row = $stats->fetch()) !== false) {
+                $pdo->prepare("INSERT INTO {$table} (site_id, date, country_code, {$column}, visits) VALUES (:site_id, :date, :country_code, :value, :visits)")->execute([
+                    'site_id' => $siteId,
+                    'date' => $date,
+                    'country_code' => (string) $row['country_code'],
+                    'value' => (string) $row['value'],
+                    'visits' => (int) $row['visits'],
+                ]);
+            }
+        }
+
+        // Revenue is summed per currency, never across currencies.
+        $revenueStats = $pdo->prepare(
+            "SELECT event_name, revenue_currency, COUNT(*) AS conversions, SUM(revenue_amount) AS revenue_total
+             FROM events_raw
+             WHERE site_id = :site_id AND DATE(created_at) = :date AND event_type = 'custom'
+               AND revenue_amount IS NOT NULL AND revenue_currency IS NOT NULL
+             GROUP BY event_name, revenue_currency",
+        );
+        $revenueStats->execute(['site_id' => $siteId, 'date' => $date]);
+        while (($row = $revenueStats->fetch()) !== false) {
+            $pdo->prepare('INSERT INTO daily_revenue_stats (site_id, date, event_name, currency, conversions, revenue_total) VALUES (:site_id, :date, :event_name, :currency, :conversions, :revenue_total)')->execute([
+                'site_id' => $siteId,
+                'date' => $date,
+                'event_name' => (string) $row['event_name'],
+                'currency' => (string) $row['revenue_currency'],
+                'conversions' => (int) $row['conversions'],
+                'revenue_total' => (string) $row['revenue_total'],
             ]);
         }
     }

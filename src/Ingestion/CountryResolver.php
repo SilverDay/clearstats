@@ -10,6 +10,7 @@ namespace ClearStats\Ingestion;
 final class CountryResolver
 {
     private readonly ?\MaxMind\Db\Reader $reader;
+    private readonly ?\MaxMind\Db\Reader $cityReader;
 
     /**
      * @param list<string> $trustedProxyIps
@@ -17,9 +18,16 @@ final class CountryResolver
     public function __construct(
         private readonly array $trustedProxyIps = [],
         ?string $countryDatabasePath = null,
+        ?string $cityDatabasePath = null,
     ) {
         $this->reader = $countryDatabasePath !== null && is_readable($countryDatabasePath)
             ? new \MaxMind\Db\Reader($countryDatabasePath)
+            : null;
+        // Optional, config-gated: no CF-IPCountry-style proxy header fallback
+        // exists for region/city, so without a City DB configured these are
+        // always empty rather than degrading to a coarser signal.
+        $this->cityReader = $cityDatabasePath !== null && is_readable($cityDatabasePath)
+            ? new \MaxMind\Db\Reader($cityDatabasePath)
             : null;
     }
 
@@ -46,6 +54,30 @@ final class CountryResolver
 
         $country = strtoupper(trim((string) ($server['HTTP_CF_IPCOUNTRY'] ?? '')));
         return preg_match('/^[A-Z]{2}$/', $country) === 1 ? $country : '';
+    }
+
+    /**
+     * @return array{region: string, city: string}
+     */
+    public function resolveRegionCity(string $clientIp): array
+    {
+        $empty = ['region' => '', 'city' => ''];
+        if ($this->cityReader === null || filter_var($clientIp, FILTER_VALIDATE_IP) === false) {
+            return $empty;
+        }
+
+        try {
+            $data = $this->cityReader->get($clientIp);
+            $region = (string) ($data['subdivisions'][0]['iso_code'] ?? '');
+            $city = trim((string) ($data['city']['names']['en'] ?? ''));
+
+            return [
+                'region' => preg_match('/^[A-Z0-9]{1,8}$/', $region) === 1 ? $region : '',
+                'city' => $city === '' ? '' : mb_substr($city, 0, 255),
+            ];
+        } catch (\Throwable) {
+            return $empty;
+        }
     }
 
     private function isTrustedProxy(string $address): bool

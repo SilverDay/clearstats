@@ -51,6 +51,32 @@ final class StatsRollupTest extends TestCase
         $this->assertSame('1', (string) $deviceRow['visits']);
     }
 
+    public function testDimensionRollupsCountOncePerPageviewNotPerEvent(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM events_raw WHERE site_id = 'dim-count-site'");
+        $pdo->exec("DELETE FROM daily_country_stats WHERE site_id = 'dim-count-site'");
+
+        // One session: a pageview plus its session_end, both carrying the same
+        // country_code. Only the pageview should count toward "visits" —
+        // session_end/custom rows must not inflate the dimension count.
+        $insert = $pdo->prepare('INSERT INTO events_raw (site_id, session_id, visitor_hash, event_type, url_path, country_code, created_at) VALUES (:site_id, :session_id, :visitor_hash, :event_type, :url_path, :country_code, :created_at)');
+        $base = ['site_id' => 'dim-count-site', 'session_id' => 's1', 'visitor_hash' => str_repeat('4', 64), 'url_path' => '/', 'country_code' => 'DE', 'created_at' => '2026-09-14 10:00:00'];
+        $insert->execute($base + ['event_type' => 'pageview']);
+        $insert->execute($base + ['event_type' => 'session_end']);
+
+        try {
+            (new StatsRollup($database))->aggregateDay('dim-count-site', '2026-09-14');
+
+            $country = $pdo->query("SELECT visits FROM daily_country_stats WHERE site_id = 'dim-count-site' AND country_code = 'DE'")->fetch();
+            $this->assertSame('1', (string) $country['visits']);
+        } finally {
+            $pdo->exec("DELETE FROM events_raw WHERE site_id = 'dim-count-site'");
+            $pdo->exec("DELETE FROM daily_country_stats WHERE site_id = 'dim-count-site'");
+        }
+    }
+
     public function testAggregatesPerPageVisitorsEntrancesAndBounces(): void
     {
         $database = TestDatabase::create();
@@ -183,6 +209,52 @@ final class StatsRollupTest extends TestCase
             $pdo->exec("DELETE FROM daily_campaign_stats WHERE site_id = 'metrics-site'");
             $pdo->prepare('DELETE FROM sites WHERE id = :site_id')->execute(['site_id' => 'metrics-site']);
             $pdo->prepare('DELETE FROM users WHERE id = :user_id')->execute(['user_id' => $userId]);
+        }
+    }
+
+    public function testAggregatesCampaignTermContentRegionCityAndRevenue(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM events_raw WHERE site_id = 'ext-site'");
+
+        $insert = $pdo->prepare('INSERT INTO events_raw (site_id, visitor_hash, event_type, event_name, url_path, campaign_source, campaign_term, campaign_content, revenue_amount, revenue_currency, country_code, region, city, created_at) VALUES (:site_id, :visitor_hash, :event_type, :event_name, :url_path, :campaign_source, :campaign_term, :campaign_content, :revenue_amount, :revenue_currency, :country_code, :region, :city, :created_at)');
+        $base = ['site_id' => 'ext-site', 'visitor_hash' => str_repeat('a', 64), 'created_at' => '2026-09-14 10:00:00'];
+
+        $insert->execute($base + ['event_type' => 'pageview', 'event_name' => null, 'url_path' => '/', 'campaign_source' => 'google', 'campaign_term' => 'analytics', 'campaign_content' => 'ad-1', 'revenue_amount' => null, 'revenue_currency' => null, 'country_code' => 'DE', 'region' => 'BE', 'city' => 'Berlin']);
+        $insert->execute($base + ['event_type' => 'pageview', 'event_name' => null, 'url_path' => '/pricing', 'campaign_source' => 'google', 'campaign_term' => 'analytics', 'campaign_content' => 'ad-2', 'revenue_amount' => null, 'revenue_currency' => null, 'country_code' => 'DE', 'region' => 'BY', 'city' => 'Munich']);
+        $insert->execute($base + ['event_type' => 'custom', 'event_name' => 'conversion:signup', 'url_path' => '/pricing', 'campaign_source' => null, 'campaign_term' => null, 'campaign_content' => null, 'revenue_amount' => '49.90', 'revenue_currency' => 'EUR', 'country_code' => 'DE', 'region' => null, 'city' => null]);
+        $insert->execute($base + ['event_type' => 'custom', 'event_name' => 'conversion:signup', 'url_path' => '/pricing', 'campaign_source' => null, 'campaign_term' => null, 'campaign_content' => null, 'revenue_amount' => '99.00', 'revenue_currency' => 'USD', 'country_code' => 'US', 'region' => null, 'city' => null]);
+
+        try {
+            (new StatsRollup($database))->aggregateDay('ext-site', '2026-09-14');
+
+            $term = $pdo->query("SELECT visits FROM daily_campaign_term_stats WHERE site_id = 'ext-site' AND campaign_term = 'analytics'")->fetch();
+            $this->assertSame('2', (string) $term['visits']);
+
+            $content = $pdo->query("SELECT visits FROM daily_campaign_content_stats WHERE site_id = 'ext-site' AND campaign_content = 'ad-1'")->fetch();
+            $this->assertSame('1', (string) $content['visits']);
+
+            $region = $pdo->query("SELECT visits FROM daily_region_stats WHERE site_id = 'ext-site' AND country_code = 'DE' AND region = 'BE'")->fetch();
+            $this->assertSame('1', (string) $region['visits']);
+
+            $city = $pdo->query("SELECT visits FROM daily_city_stats WHERE site_id = 'ext-site' AND country_code = 'DE' AND city = 'Munich'")->fetch();
+            $this->assertSame('1', (string) $city['visits']);
+
+            $eur = $pdo->query("SELECT conversions, revenue_total FROM daily_revenue_stats WHERE site_id = 'ext-site' AND currency = 'EUR'")->fetch();
+            $this->assertSame('1', (string) $eur['conversions']);
+            $this->assertSame(49.9, (float) $eur['revenue_total']);
+
+            $usd = $pdo->query("SELECT conversions, revenue_total FROM daily_revenue_stats WHERE site_id = 'ext-site' AND currency = 'USD'")->fetch();
+            $this->assertSame('1', (string) $usd['conversions']);
+            $this->assertSame(99.0, (float) $usd['revenue_total']);
+        } finally {
+            $pdo->exec("DELETE FROM events_raw WHERE site_id = 'ext-site'");
+            $pdo->exec("DELETE FROM daily_campaign_term_stats WHERE site_id = 'ext-site'");
+            $pdo->exec("DELETE FROM daily_campaign_content_stats WHERE site_id = 'ext-site'");
+            $pdo->exec("DELETE FROM daily_region_stats WHERE site_id = 'ext-site'");
+            $pdo->exec("DELETE FROM daily_city_stats WHERE site_id = 'ext-site'");
+            $pdo->exec("DELETE FROM daily_revenue_stats WHERE site_id = 'ext-site'");
         }
     }
 }

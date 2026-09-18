@@ -68,5 +68,9 @@ return [
     ],
     'geoip' => [
         'country_database_path' => '/var/lib/GeoIP/GeoLite2-Country.mmdb',
+        // Optional. Region/city are only ever resolved from this file — there is
+        // no proxy-header fallback for them the way country has CF-IPCountry.
+        // Leave unset (or null) to run country-only; region/city stay empty.
+        'city_database_path' => null,
     ],
 ];

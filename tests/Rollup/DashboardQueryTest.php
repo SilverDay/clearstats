@@ -178,4 +178,51 @@ final class DashboardQueryTest extends TestCase
             $pdo->exec('DELETE FROM users WHERE id = 999');
         }
     }
+
+    public function testReadsExtendedTrackingDimensions(): void
+    {
+        $database = TestDatabase::create();
+        $pdo = $database->pdo();
+        $pdo->exec("DELETE FROM daily_campaign_term_stats WHERE site_id = 'ext-query-site'");
+        $pdo->exec("DELETE FROM daily_campaign_content_stats WHERE site_id = 'ext-query-site'");
+        $pdo->exec("DELETE FROM daily_region_stats WHERE site_id = 'ext-query-site'");
+        $pdo->exec("DELETE FROM daily_city_stats WHERE site_id = 'ext-query-site'");
+        $pdo->exec("DELETE FROM daily_revenue_stats WHERE site_id = 'ext-query-site'");
+
+        $pdo->exec("INSERT INTO daily_campaign_term_stats (site_id, date, campaign_term, visits) VALUES ('ext-query-site', '2026-09-14', 'analytics', 5)");
+        $pdo->exec("INSERT INTO daily_campaign_content_stats (site_id, date, campaign_content, visits) VALUES ('ext-query-site', '2026-09-14', 'ad-1', 3)");
+        $pdo->exec("INSERT INTO daily_region_stats (site_id, date, country_code, region, visits) VALUES ('ext-query-site', '2026-09-14', 'DE', 'BE', 4)");
+        $pdo->exec("INSERT INTO daily_city_stats (site_id, date, country_code, city, visits) VALUES ('ext-query-site', '2026-09-14', 'DE', 'Berlin', 2)");
+        $pdo->exec("INSERT INTO daily_revenue_stats (site_id, date, event_name, currency, conversions, revenue_total) VALUES ('ext-query-site', '2026-09-14', 'conversion:signup', 'EUR', 3, 149.50)");
+
+        try {
+            $query = new DashboardQuery($database);
+
+            $this->assertSame('analytics', $query->topCampaignTerms('ext-query-site', '2026-09-14')[0]['campaign_term']);
+            $this->assertSame('ad-1', $query->topCampaignContent('ext-query-site', '2026-09-14')[0]['campaign_content']);
+
+            $region = $query->topRegions('ext-query-site', '2026-09-14')[0];
+            $this->assertSame(['country_code' => 'DE', 'region' => 'BE', 'visits' => 4], $region);
+
+            $city = $query->topCities('ext-query-site', '2026-09-14')[0];
+            $this->assertSame(['country_code' => 'DE', 'city' => 'Berlin', 'visits' => 2], $city);
+
+            $revenue = $query->revenueByGoal('ext-query-site', '2026-09-14')[0];
+            $this->assertSame('conversion:signup', $revenue['event_name']);
+            $this->assertSame('EUR', $revenue['currency']);
+            $this->assertSame(3, $revenue['conversions']);
+            $this->assertSame(149.5, $revenue['revenue_total']);
+
+            // Portfolio variants scoped by a caller-supplied site list.
+            $this->assertSame('analytics', $query->portfolioTopCampaignTerms(['ext-query-site'], '2026-09-14')[0]['campaign_term']);
+            $this->assertSame(4, $query->portfolioTopRegions(['ext-query-site'], '2026-09-14')[0]['visits']);
+            $this->assertSame(149.5, $query->portfolioRevenue(['ext-query-site'], '2026-09-14')[0]['revenue_total']);
+        } finally {
+            $pdo->exec("DELETE FROM daily_campaign_term_stats WHERE site_id = 'ext-query-site'");
+            $pdo->exec("DELETE FROM daily_campaign_content_stats WHERE site_id = 'ext-query-site'");
+            $pdo->exec("DELETE FROM daily_region_stats WHERE site_id = 'ext-query-site'");
+            $pdo->exec("DELETE FROM daily_city_stats WHERE site_id = 'ext-query-site'");
+            $pdo->exec("DELETE FROM daily_revenue_stats WHERE site_id = 'ext-query-site'");
+        }
+    }
 }

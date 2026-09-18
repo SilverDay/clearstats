@@ -124,7 +124,7 @@ final class EventController
             return;
         }
 
-        $allowedFields = ['site_id', 'domain', 'event_type', 'url_path', 'referrer_url', 'event_name', 'props', 'session_id', 'session_started_at', 'engagement_seconds', 'campaign_source', 'campaign_medium', 'campaign_name'];
+        $allowedFields = ['site_id', 'domain', 'event_type', 'url_path', 'referrer_url', 'event_name', 'props', 'session_id', 'session_started_at', 'engagement_seconds', 'campaign_source', 'campaign_medium', 'campaign_name', 'campaign_term', 'campaign_content', 'revenue_amount', 'revenue_currency'];
         if (array_diff(array_keys($payload), $allowedFields) !== []) {
             $this->rejectRequest(400, 'Unexpected event fields.', $sourceIp);
             return;
@@ -190,6 +190,11 @@ final class EventController
         }
 
         $metadata = $this->userAgentClassifier->classify($userAgent);
+        $geo = $this->countryResolver->resolveRegionCity($clientIp);
+        [$revenueAmount, $revenueCurrency] = $this->boundedRevenue(
+            $payload['revenue_amount'] ?? null,
+            $payload['revenue_currency'] ?? null,
+        );
         // One instant for both the salt period and created_at, so they cannot
         // straddle a rotation boundary.
         $receivedAt = time();
@@ -206,13 +211,20 @@ final class EventController
             ),
             'event_type' => $eventType,
             'event_name' => (string) ($payload['event_name'] ?? ''),
+            'event_props' => $this->boundedProps($payload['props'] ?? null),
             'engagement_seconds' => $engagementSeconds,
             'url_path' => $urlPath,
             'campaign_source' => $this->boundedCampaignValue($payload['campaign_source'] ?? null),
             'campaign_medium' => $this->boundedCampaignValue($payload['campaign_medium'] ?? null),
             'campaign_name' => $this->boundedCampaignValue($payload['campaign_name'] ?? null),
+            'campaign_term' => $this->boundedCampaignValue($payload['campaign_term'] ?? null),
+            'campaign_content' => $this->boundedCampaignValue($payload['campaign_content'] ?? null),
+            'revenue_amount' => $revenueAmount,
+            'revenue_currency' => $revenueCurrency,
             'referrer_domain' => $this->extractDomainFromUrl($referrerUrl),
             'country_code' => $this->countryResolver->resolve($_SERVER, $clientIp),
+            'region' => $geo['region'] !== '' ? $geo['region'] : null,
+            'city' => $geo['city'] !== '' ? $geo['city'] : null,
             'device_type' => $metadata['device_type'],
             'browser' => $metadata['browser'],
             'operating_system' => $metadata['operating_system'],
@@ -285,6 +297,51 @@ final class EventController
         }
         $value = trim($value);
         return $value === '' ? null : substr($value, 0, 128);
+    }
+
+    /**
+     * An amount without a valid currency (or vice versa) is meaningless for
+     * the per-currency revenue rollup, so both are returned together or not
+     * at all — never a dangling amount with no currency to sum it under.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function boundedRevenue(mixed $amount, mixed $currency): array
+    {
+        if (!is_numeric($amount) || !is_string($currency)) {
+            return [null, null];
+        }
+
+        $amount = (float) $amount;
+        $currency = strtoupper(trim($currency));
+
+        if ($amount < 0 || $amount > 999999999.99 || preg_match('/^[A-Z]{3}$/', $currency) !== 1) {
+            return [null, null];
+        }
+
+        return [number_format($amount, 2, '.', ''), $currency];
+    }
+
+    /**
+     * Custom-event properties are accepted as an arbitrary object but bounded
+     * in size — this column exists so the data isn't silently discarded (it
+     * previously was), not to become an unbounded free-text sink. Non-array
+     * input, or anything that doesn't fit the bound once encoded, is dropped
+     * entirely rather than truncated (truncated JSON is invalid JSON).
+     */
+    private function boundedProps(mixed $value): ?string
+    {
+        if (!is_array($value) || $value === []) {
+            return null;
+        }
+
+        try {
+            $encoded = json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        return strlen($encoded) <= 2048 ? $encoded : null;
     }
 
     private function originMatchesSite(string $origin, string $configuredDomain): bool

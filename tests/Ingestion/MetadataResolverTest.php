@@ -23,6 +23,17 @@ final class MetadataResolverTest extends TestCase
         $this->assertSame('', $resolver->resolve(['REMOTE_ADDR' => '127.0.0.1', 'HTTP_CF_IPCOUNTRY' => 'unknown']));
     }
 
+    public function testRegionCityStaysEmptyWithoutACityDatabaseConfigured(): void
+    {
+        // No CF-IPCountry-style proxy fallback exists for region/city, so
+        // without a GeoLite2-City file this must always degrade to empty
+        // rather than guessing from the country-only signal.
+        $resolver = new CountryResolver(['10.0.0.0/8']);
+
+        $this->assertSame(['region' => '', 'city' => ''], $resolver->resolveRegionCity('203.0.113.10'));
+        $this->assertSame(['region' => '', 'city' => ''], $resolver->resolveRegionCity('not-an-ip'));
+    }
+
     public function testClassifiesCoarseDeviceAndBrowserMetadata(): void
     {
         $classifier = new UserAgentClassifier();

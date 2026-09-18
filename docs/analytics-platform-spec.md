@@ -159,6 +159,8 @@ Single static JS file served from the central platform (e.g., `https://analytics
 
 No IP, no raw UA, no visitor identifier that persists beyond 24h relevance (the hash itself is only meaningful within its salt-rotation window).
 
+This table (like `daily_page_stats` in §6.2) has grown several columns since this list was last reconciled — session/engagement fields, extended campaign attribution, revenue, region/city, and `event_props` (an optional, size-bounded JSON blob for `trackEvent()`'s custom properties — stored so it isn't silently discarded, but not yet rolled up or exposed anywhere in the dashboard). Treat the migrations under `migrations/` as authoritative for the exact current column set.
+
 **Retention: configurable per tenant** — decided. Add a `raw_event_retention_days` column to the `sites` table (§6.3), defaulted to a sensible value (e.g. 30) at site-creation time but overridable per site. The purge job (cron, daily) reads each site's configured window rather than applying one global constant. Note for the DPIA: per-tenant retention needs its own one-line justification per site if any site's window is set notably longer than the default — data minimization still applies per-site, "configurable" isn't itself the compliance argument.
 
 ### 6.2 Rollup tables (long-term retention)
@@ -168,6 +170,9 @@ Pre-aggregated, indexed for dashboard query performance:
 - `daily_referrer_stats` (site_id, date, referrer_domain, visits)
 - `daily_country_stats` (site_id, date, country_code, visits)
 - `daily_device_stats` (site_id, date, device_type, visits)
+- `daily_campaign_term_stats` / `daily_campaign_content_stats` (site_id, date, campaign_term|campaign_content, visits) — `utm_term`/`utm_content`, reported as their own breakdowns rather than folded into `daily_campaign_stats`' source/medium/name key
+- `daily_region_stats` / `daily_city_stats` (site_id, date, country_code, region|city, visits) — populated only when `geoip.city_database_path` is configured (see `docs/deployment-runbook.md`); empty otherwise, no proxy-header fallback exists for these the way country has `CF-IPCountry`
+- `daily_revenue_stats` (site_id, date, event_name, currency, conversions, revenue_total) — summed per currency, never combined across currencies
 
 Rollup job (cron, e.g. hourly for the current day + a final pass after midnight) aggregates raw events into these tables; dashboard queries read only from rollups, never raw events, keeping query latency flat regardless of raw event volume growth.
 

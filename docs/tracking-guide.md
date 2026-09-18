@@ -12,6 +12,21 @@ Add the site-specific snippet before the closing `</body>` tag:
 
 Use the site ID shown by ClearStats after site creation or from the site's **Install** page.
 
+### Optional automatic tracking
+
+Outbound-link, file-download, and 404 tracking are opt-in — installing the base snippet above does not enable them. Add the relevant attribute to collect more than the default:
+
+```html
+<script defer data-site-id="YOUR_SITE_ID" data-outbound-links data-file-downloads
+        src="https://clearstats.online/js/track.js"></script>
+```
+
+- `data-outbound-links` — fires an `Outbound Link: <hostname>` event when a visitor clicks a link to a different domain.
+- `data-file-downloads` — fires a `File Download: <filename>` event when a visitor clicks a link to a common downloadable file type (PDF, ZIP, DOCX, MP3, etc.).
+- `data-404` — place this attribute on the script tag **only on your site's actual 404/error page**. The tracker has no way to see the HTTP status code the server sent, so this fires a `404` event by placement, not by detection, the same way Plausible's own 404 tracking works.
+
+All three appear in the dashboard's **Conversions and custom events** panel alongside conversions and custom events.
+
 ## Automatic pageviews
 
 The tracker sends one `pageview` event when it loads. It also detects SPA navigation through `history.pushState`, `history.replaceState`, and `popstate`.
@@ -23,6 +38,7 @@ Each pageview may include:
 - Site-specific ephemeral session ID
 - Sanitized UTM campaign values
 - Coarse browser, operating system, device, language, and country metadata
+- Region and city, if the operator has configured a GeoLite2-City database (`geoip.city_database_path`); empty otherwise
 
 ## Campaign attribution
 
@@ -37,8 +53,10 @@ Supported values:
 - `utm_source`
 - `utm_medium`
 - `utm_campaign`
+- `utm_term`
+- `utm_content`
 
-Values are limited to 128 characters and should never contain email addresses, user IDs, tokens, or other personal data. Campaigns appear in the dashboard after the queue worker and rollup job have run.
+Values are limited to 128 characters and should never contain email addresses, user IDs, tokens, or other personal data. Campaigns appear in the dashboard after the queue worker and rollup job have run. `utm_term`/`utm_content` are reported as their own breakdowns (**Campaign term**/**Campaign content**), separate from the source/medium/campaign breakdown — the same separation Plausible uses, rather than combining all five into one wide key.
 
 ## Conversion events
 
@@ -54,6 +72,18 @@ Conversions are stored as custom events with the `conversion:` prefix and appear
 
 Event names should be stable, short, and free of personal data.
 
+### Revenue goals
+
+Attach a monetary value to a conversion for the dashboard's **Revenue** panel:
+
+```js
+window.clearstats.trackConversion('purchase_completed', {
+    revenue: { amount: 49.00, currency: 'EUR' }
+});
+```
+
+`amount` must be a non-negative number; `currency` an ISO 4217 code (e.g. `EUR`, `USD`). Both are required together — an amount sent without a valid currency (or vice versa) is dropped, never stored as a dangling value. Revenue is summed **per currency**, never combined across currencies, since amounts in different currencies cannot be added together without a live exchange rate the platform doesn't track.
+
 ## Custom events
 
 For other named events:
@@ -61,9 +91,10 @@ For other named events:
 ```js
 window.clearstats.trackEvent('video_started');
 window.clearstats.trackEvent('pricing_cta_clicked');
+window.clearstats.trackEvent('video_started', { video_id: 'intro', position: 0 });
 ```
 
-The current server stores the event name. Do not send personal data in event names or properties.
+The event name is stored and counted in the dashboard's **Conversions and custom events** panel. An optional `props` object is stored alongside the raw event (bounded to 2KB once serialized — anything larger is dropped, not truncated) for the event's normal retention window, but there is currently no dashboard breakdown or filtering by property value; storing them stops the data from being silently discarded, it doesn't yet make them visible anywhere in the UI. Do not send personal data in event names or properties.
 
 ## Click and scroll hooks
 

@@ -127,6 +127,78 @@ final class EventControllerRequestTest extends TestCase
         $this->assertSame(64, strlen((string) json_decode($queued, true)['visitor_hash']));
     }
 
+    public function testCustomEventPropsAreStoredNotDiscarded(): void
+    {
+        $_POST = [
+            'site_id' => 'site-1',
+            'event_type' => 'custom',
+            'url_path' => '/',
+            'event_name' => 'video_started',
+            'props' => ['video_id' => 'intro', 'position' => 0],
+        ];
+
+        $this->send($this->controller());
+        $queued = json_decode((string) $this->redis->lIndex('clearstats:events', 0), true);
+
+        $this->assertSame('{"video_id":"intro","position":0}', $queued['event_props']);
+    }
+
+    public function testOversizedPropsAreDroppedNotTruncated(): void
+    {
+        $_POST = [
+            'site_id' => 'site-1',
+            'event_type' => 'custom',
+            'url_path' => '/',
+            'event_name' => 'video_started',
+            'props' => ['blob' => str_repeat('x', 3000)],
+        ];
+
+        $this->send($this->controller());
+        $queued = json_decode((string) $this->redis->lIndex('clearstats:events', 0), true);
+
+        $this->assertNull($queued['event_props']);
+    }
+
+    public function testAcceptsExtendedCampaignAndRevenueFields(): void
+    {
+        $_POST = [
+            'site_id' => 'site-1',
+            'event_type' => 'custom',
+            'url_path' => '/',
+            'event_name' => 'conversion:signup',
+            'campaign_term' => 'analytics+software',
+            'campaign_content' => 'header-cta',
+            'revenue_amount' => 49.9,
+            'revenue_currency' => 'eur',
+        ];
+
+        $this->send($this->controller());
+        $queued = json_decode((string) $this->redis->lIndex('clearstats:events', 0), true);
+
+        $this->assertSame('analytics+software', $queued['campaign_term']);
+        $this->assertSame('header-cta', $queued['campaign_content']);
+        $this->assertSame('49.90', $queued['revenue_amount']);
+        $this->assertSame('EUR', $queued['revenue_currency']);
+    }
+
+    public function testDropsRevenueAmountWithoutAValidCurrency(): void
+    {
+        $_POST = [
+            'site_id' => 'site-1',
+            'event_type' => 'custom',
+            'url_path' => '/',
+            'event_name' => 'conversion:signup',
+            'revenue_amount' => 49.9,
+            'revenue_currency' => 'not-a-currency',
+        ];
+
+        $this->send($this->controller());
+        $queued = json_decode((string) $this->redis->lIndex('clearstats:events', 0), true);
+
+        $this->assertNull($queued['revenue_amount']);
+        $this->assertNull($queued['revenue_currency']);
+    }
+
     public function testRepeatedlyRejectedSourceIsBlocked(): void
     {
         $controller = $this->controller(2);

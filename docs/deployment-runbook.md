@@ -49,6 +49,7 @@ Run PHPUnit from the project root. Database-backed tests use an in-memory SQLite
 - Configure `geoip.country_database_path` to a readable MaxMind Country `.mmdb` file, such as `GeoLite2-Country.mmdb`.
 - Country lookup happens in memory from the transient client IP; only the two-letter country code is queued and persisted.
 - If the MaxMind database is unavailable or has no result, `CF-IPCountry` is accepted only from a trusted proxy. Otherwise country data remains empty.
+- Optionally configure `geoip.city_database_path` to a readable MaxMind **City** `.mmdb` file (GeoLite2-City, ~70MB — a different, larger download than the Country database) to populate region/city. There is no proxy-header fallback for region/city the way country has `CF-IPCountry`: leave this unset and they stay empty, no other configuration required.
 
 ## Privacy and retention
 

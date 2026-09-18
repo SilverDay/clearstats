@@ -42,12 +42,19 @@ CREATE TABLE IF NOT EXISTS events_raw (
     campaign_source TEXT,
     campaign_medium TEXT,
     campaign_name TEXT,
+    campaign_term TEXT,
+    campaign_content TEXT,
+    revenue_amount REAL,
+    revenue_currency TEXT,
     referrer_domain TEXT,
     country_code TEXT,
+    region TEXT,
+    city TEXT,
     device_type TEXT NOT NULL DEFAULT 'other',
     browser TEXT,
     operating_system TEXT,
     language_code TEXT,
+    event_props TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS daily_site_stats (
@@ -127,4 +134,43 @@ CREATE TABLE IF NOT EXISTS daily_language_stats (
     language_code TEXT NOT NULL,
     visits INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (site_id, date, language_code)
+);
+CREATE TABLE IF NOT EXISTS daily_campaign_term_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    campaign_term TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, campaign_term)
+);
+CREATE TABLE IF NOT EXISTS daily_campaign_content_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    campaign_content TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, campaign_content)
+);
+CREATE TABLE IF NOT EXISTS daily_region_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    country_code TEXT NOT NULL,
+    region TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, country_code, region)
+);
+CREATE TABLE IF NOT EXISTS daily_city_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    country_code TEXT NOT NULL,
+    city TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, country_code, city)
+);
+CREATE TABLE IF NOT EXISTS daily_revenue_stats (
+    site_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    event_name TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    conversions INTEGER NOT NULL DEFAULT 0,
+    revenue_total REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (site_id, date, event_name, currency)
 );

@@ -19,6 +19,13 @@
     var siteId = script.getAttribute('data-site-id');
     if (!siteId) return;
 
+    // Opt-in per feature (see docs/tracking-guide.md) — installing track.js
+    // must not silently start collecting more than a site explicitly asks for.
+    var trackOutboundLinks = script.hasAttribute('data-outbound-links');
+    var trackFileDownloads = script.hasAttribute('data-file-downloads');
+    var trackNotFound = script.hasAttribute('data-404');
+    var downloadExtensions = /\.(pdf|zip|rar|7z|dmg|exe|msi|pkg|deb|rpm|docx?|xlsx?|pptx?|csv|txt|mp3|mp4|mov|avi)$/i;
+
     var endpoint = script.src.replace(/\/js\/track\.js.*$/, '/api/event?site_id=' + encodeURIComponent(siteId));
     var sessionId = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function (value) {
         return value.toString(16).padStart(2, '0');
@@ -44,6 +51,8 @@
                 , campaign_source: campaign('utm_source')
                 , campaign_medium: campaign('utm_medium')
                 , campaign_name: campaign('utm_campaign')
+                , campaign_term: campaign('utm_term')
+                , campaign_content: campaign('utm_content')
             },
             extra || {}
         );
@@ -73,8 +82,14 @@
     window.clearstats.trackEvent = function (name, props) {
         send('custom', { event_name: name, props: props || {} });
     };
-    window.clearstats.trackConversion = function (name) {
-        send('custom', { event_name: 'conversion:' + String(name).slice(0, 96) });
+    window.clearstats.trackConversion = function (name, options) {
+        var extra = { event_name: 'conversion:' + String(name).slice(0, 96) };
+        var revenue = options && options.revenue;
+        if (revenue && typeof revenue.amount === 'number' && isFinite(revenue.amount) && revenue.amount >= 0 && typeof revenue.currency === 'string') {
+            extra.revenue_amount = revenue.amount;
+            extra.revenue_currency = revenue.currency.slice(0, 3).toUpperCase();
+        }
+        send('custom', extra);
     };
     window.clearstats.trackClick = function (name) {
         send('custom', { event_name: 'click:' + String(name || 'unnamed').slice(0, 96) });
@@ -95,6 +110,32 @@
             }
         });
     }, { passive: true });
+
+    // Outbound-link / file-download tracking — opt-in via data-outbound-links
+    // / data-file-downloads on the <script> tag (see top of file). Reports
+    // only the destination host or file name as the event name, the same
+    // "identify via event_name" pattern trackClick/trackScroll already use;
+    // no separate props storage exists server-side to put it anywhere else.
+    if (trackOutboundLinks || trackFileDownloads) {
+        document.addEventListener('click', function (event) {
+            var link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+            if (!link) return;
+
+            var url;
+            try {
+                url = new URL(link.href, location.href);
+            } catch (e) {
+                return;
+            }
+
+            if (trackFileDownloads && downloadExtensions.test(url.pathname)) {
+                var fileName = url.pathname.split('/').pop() || url.pathname;
+                send('custom', { event_name: 'File Download: ' + fileName.slice(0, 96) });
+            } else if (trackOutboundLinks && url.hostname !== location.hostname) {
+                send('custom', { event_name: 'Outbound Link: ' + url.hostname.slice(0, 96) });
+            }
+        }, true);
+    }
 
     var lastLocation = location.href;
     function trackRouteChange() {
@@ -127,4 +168,11 @@
 
     // Initial pageview on script load.
     send('pageview');
+
+    // Opt-in via data-404 on the <script> tag, placed on the site's actual
+    // error page — same opt-in-by-placement mechanism Plausible uses, since
+    // client-side JS has no way to see the HTTP status code the server sent.
+    if (trackNotFound) {
+        send('custom', { event_name: '404' });
+    }
 })();
