@@ -33,6 +33,10 @@ final class InfoController
         <h2>Built by SilverDay Media</h2>
         <p>ClearStats is operated by Klaus-E. Klingner / SilverDay Media, the team behind Daybreak and security-focused software for people who need clarity without unnecessary data collection.</p>
     </article>
+    <article class="card">
+        <h2>Open source</h2>
+        <p>ClearStats is MIT-licensed and developed in the open. Read the code, self-host your own instance, or contribute on <a href="https://github.com/SilverDay/clearstats" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
+    </article>
 </div>
 HTML);
     }
@@ -52,7 +56,7 @@ HTML);
     <details><summary>What metrics are available?</summary><p>Pageviews, unique daily visitor hashes, sessions, bounce rate, engagement time, top pages, referrers, countries, devices, campaign attribution, and named custom/conversion events.</p></details>
     <details><summary>Can I identify returning visitors?</summary><p>No. Cross-day returning-visitor identification is intentionally not supported because the visitor hash is tied to a rotating daily salt.</p></details>
     <details><summary>Where is data hosted?</summary><p>ClearStats is self-hosted. The operator controls the application server, database, Redis instance, GeoIP database, backups, and access logs.</p></details>
-    <details><summary>How do I get help?</summary><p>Contact <a href="mailto:support@skyggn.dev">support@skyggn.dev</a>.</p></details>
+    <details><summary>How do I get help?</summary><p>Contact <a href="mailto:klingner@silverday.de">klingner@silverday.de</a>.</p></details>
 </div>
 HTML);
     }
@@ -65,7 +69,7 @@ HTML);
     <h2>Operator</h2>
     <p>Klaus-E. Klingner, operating as SilverDay Media<br>c/o IP-Management #6585<br>Ludwig-Erhard-Str. 18<br>20459 Hamburg<br>Germany</p>
     <h2>Contact</h2>
-    <p>Email: <a href="mailto:support@skyggn.dev">support@skyggn.dev</a></p>
+    <p>Email: <a href="mailto:klingner@silverday.de">klingner@silverday.de</a></p>
     <h2>Responsible for content</h2>
     <p>Klaus-E. Klingner at the address above.</p>
     <h2>Disclaimer</h2>
@@ -81,7 +85,7 @@ HTML);
 <section class="prose">
     <p class="lede">Last updated: 14 September 2026</p>
     <h2>1. Controller</h2>
-    <p>Klaus-E. Klingner, operating as SilverDay Media, c/o IP-Management #6585, Ludwig-Erhard-Str. 18, 20459 Hamburg, Germany. Contact: <a href="mailto:support@skyggn.dev">support@skyggn.dev</a>.</p>
+    <p>Klaus-E. Klingner, operating as SilverDay Media, c/o IP-Management #6585, Ludwig-Erhard-Str. 18, 20459 Hamburg, Germany. Contact: <a href="mailto:klingner@silverday.de">klingner@silverday.de</a>.</p>
     <h2>2. What ClearStats processes</h2>
     <p>For a pageview, the tracked site sends the site identifier, page path, referrer domain, event type, and optional bounded campaign or custom-event values. The ClearStats server receives the request IP and User-Agent as part of normal HTTP processing.</p>
     <h2>3. What is not retained</h2>
@@ -93,7 +97,7 @@ HTML);
     <h2>6. Hosting and operators</h2>
     <p>ClearStats is self-hosted. The organization operating a ClearStats instance controls its hosting, database, Redis service, backups, access logs, and retention settings. This notice describes the ClearStats software model; the operator must adapt it to the actual deployment.</p>
     <h2>7. Rights and requests</h2>
-    <p>For questions about this ClearStats installation or requests concerning operator-managed account data, contact the installation operator. For software questions, contact <a href="mailto:support@skyggn.dev">support@skyggn.dev</a>. You may also have rights under applicable data protection law, including access, rectification, deletion, restriction, objection, and complaint to a supervisory authority.</p>
+    <p>For questions about this ClearStats installation or requests concerning operator-managed account data, contact the installation operator. For software questions, contact <a href="mailto:klingner@silverday.de">klingner@silverday.de</a>. You may also have rights under applicable data protection law, including access, rectification, deletion, restriction, objection, and complaint to a supervisory authority.</p>
     <h2>8. Changes</h2>
     <p>This policy may be updated when the software, deployment, or legal requirements change.</p>
 </section>
@@ -123,7 +127,7 @@ HTML);
     <h2>8. Governing law</h2>
     <p>Unless separate deployment terms apply, these terms are governed by the laws of Germany. Where legally permissible, Hamburg is the place of jurisdiction.</p>
     <h2>9. Contact</h2>
-    <p>Questions: <a href="mailto:support@skyggn.dev">support@skyggn.dev</a>.</p>
+    <p>Questions: <a href="mailto:klingner@silverday.de">klingner@silverday.de</a>.</p>
 </section>
 HTML);
     }
@@ -144,12 +148,13 @@ HTML);
     <main class="page page-narrow">
         {$content}
         <footer class="site-footer">
-            <span>ClearStats</span>
+            <span>ClearStats by <a href="https://silverday.media" target="_blank" rel="noopener noreferrer">SilverDay Media</a></span>
             <nav aria-label="Footer navigation">
                 <a href="/">Home</a>
                 <a href="/privacy">Privacy</a>
                 <a href="/terms">Terms</a>
                 <a href="/imprint">Legal notice</a>
+                <a href="https://github.com/SilverDay/clearstats" target="_blank" rel="noopener noreferrer">Open source</a>
             </nav>
         </footer>
     </main>
